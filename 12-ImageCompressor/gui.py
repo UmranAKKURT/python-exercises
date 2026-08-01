@@ -45,11 +45,10 @@ class ImageCompressorApp:
         self.input_path = None
         self.output_path = None
 
-        # DnD destekli (veya normal) ana pencereyi oluştur
         self.root = CustomWindow(
             title="Image Compressor",
             themename="darkly",
-            size=(1150, 750),
+            size=(1150, 780),
             resizable=(False, False)
         )
 
@@ -77,13 +76,13 @@ class ImageCompressorApp:
     ####################################################
 
     def create_topbar(self):
-        frame = ttk.Frame(self.root, padding=10)
+        frame = ttk.Frame(self.root, padding=15)
         frame.pack(fill=X)
 
         title = ttk.Label(
             frame,
-            text="Image Compressor",
-            font=("Segoe UI", 20, "bold")
+            text="🖼️ Image Compressor",
+            font=("Segoe UI", 22, "bold")
         )
         title.pack(side=LEFT)
 
@@ -92,115 +91,140 @@ class ImageCompressorApp:
             text="📊 Statistics",
             bootstyle="info-outline",
             command=self.show_statistics
-        ).pack(side=LEFT, padx=15)
+        ).pack(side=LEFT, padx=20)
+
+        theme_frame = ttk.Frame(frame)
+        theme_frame.pack(side=RIGHT)
 
         ttk.Button(
-            frame,
-            text="Light",
+            theme_frame,
+            text="☀️ Light",
             bootstyle=INFO,
-            command=lambda: self.change_theme("flatly")
-        ).pack(side=RIGHT, padx=5)
+            command=lambda: self.change_theme("litera")
+        ).pack(side=LEFT, padx=5)
 
         ttk.Button(
-            frame,
-            text="Dark",
+            theme_frame,
+            text="🌙 Dark",
             bootstyle=SECONDARY,
             command=lambda: self.change_theme("darkly")
-        ).pack(side=RIGHT)
+        ).pack(side=LEFT)
 
     def create_preview_area(self):
         frame = ttk.Frame(self.root)
-        frame.pack(fill=BOTH, expand=True, padx=15)
+        frame.pack(fill=BOTH, expand=True, padx=15, pady=5)
 
         self.before_frame = ttk.Labelframe(
             frame,
-            text="Original Image (Drag & Drop Here)",
-            padding=10
+            text=" Original Image (Drag & Drop Here) ",
+            padding=10,
+            bootstyle=INFO
         )
         self.before_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=10)
 
         self.after_frame = ttk.Labelframe(
             frame,
-            text="Compressed Image",
-            padding=10
+            text=" Compressed Image ",
+            padding=10,
+            bootstyle=SUCCESS
         )
         self.after_frame.pack(side=RIGHT, fill=BOTH, expand=True, padx=10)
 
-        self.before_image = ttk.Label(self.before_frame, text="No Image")
+        self.before_image = ttk.Label(self.before_frame, text="Waiting for image...", font=("Segoe UI", 12))
         self.before_image.pack(expand=True)
 
-        self.after_image = ttk.Label(self.after_frame, text="Compressed Preview")
+        self.after_image = ttk.Label(self.after_frame, text="Preview will appear here", font=("Segoe UI", 12))
         self.after_image.pack(expand=True)
 
     def create_controls(self):
-        frame = ttk.Frame(self.root, padding=15)
-        frame.pack(fill=X)
+        main_control_frame = ttk.Frame(self.root, padding=15)
+        main_control_frame.pack(fill=X)
+
+        # 1. ACTIONS FRAME
+        actions_frame = ttk.Labelframe(main_control_frame, text=" 🛠️ Actions ", padding=15)
+        actions_frame.pack(side=LEFT, fill=Y, padx=10)
 
         ttk.Button(
-            frame,
-            text="Select Image",
+            actions_frame,
+            text="📁 Select",
             bootstyle=PRIMARY,
-            command=self.select_image
-        ).grid(row=0, column=0, padx=10)
+            command=self.select_image,
+            width=12
+        ).pack(side=LEFT, padx=5)
 
         ttk.Button(
-            frame,
-            text="Compress",
+            actions_frame,
+            text="✨ Compress",
             bootstyle=SUCCESS,
-            command=self.compress_image
-        ).grid(row=0, column=1, padx=10)
+            command=self.compress_image,
+            width=12
+        ).pack(side=LEFT, padx=5)
 
         ttk.Button(
-            frame,
-            text="Batch Compress",
+            actions_frame,
+            text="📦 Batch",
             bootstyle=WARNING,
-            command=self.batch_compress
-        ).grid(row=0, column=2, padx=10)
+            command=self.batch_compress,
+            width=12
+        ).pack(side=LEFT, padx=5)
+
+        # 2. SETTINGS FRAME
+        settings_frame = ttk.Labelframe(main_control_frame, text=" ⚙️ Settings ", padding=15)
+        settings_frame.pack(side=LEFT, fill=Y, padx=10)
 
         self.smart_var = tk.BooleanVar(value=False)
         self.smart_switch = ttk.Checkbutton(
-            frame,
+            settings_frame,
             text="Smart Mode",
             variable=self.smart_var,
             bootstyle="success-round-toggle",
             command=self.toggle_smart_mode
         )
-        self.smart_switch.grid(row=0, column=3, padx=(20, 10))
+        self.smart_switch.pack(side=LEFT, padx=10)
 
-        ttk.Label(frame, text="Quality").grid(row=0, column=4, padx=(10, 0))
+        ttk.Separator(settings_frame, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=10)
+
+        ttk.Label(settings_frame, text="Quality:").pack(side=LEFT, padx=(5, 0))
+
+        # Hata Çözümü: Label'ı Scale'den ÖNCE oluşturuyoruz.
+        self.quality_label = ttk.Label(settings_frame, text="80%", font=("Segoe UI", 10, "bold"))
 
         self.quality = ttk.Scale(
-            frame,
+            settings_frame,
             from_=1,
             to=100,
             orient=HORIZONTAL,
             command=self.slider_changed,
-            length=180
+            length=130
         )
         self.quality.set(80)
-        self.quality.grid(row=0, column=5, padx=10)
 
-        self.quality_label = ttk.Label(frame, text="80%")
-        self.quality_label.grid(row=0, column=6)
+        # Ekrana yerleştirme (pack) sırası normal şekilde devam ediyor
+        self.quality.pack(side=LEFT, padx=10)
+        self.quality_label.pack(side=LEFT)
+
+        # 3. DETAILS FRAME
+        details_frame = ttk.Labelframe(main_control_frame, text=" 📄 Image Details ", padding=15)
+        details_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=10)
 
         self.info = ttk.Label(
-            frame,
-            text="Choose an image or drop it here...",
+            details_frame,
+            text="No image selected.",
             font=("Segoe UI", 10)
         )
-        self.info.grid(row=1, column=0, columnspan=7, pady=15, sticky=W, padx=10)
+        self.info.pack(side=LEFT, anchor=NW)
 
     def create_statusbar(self):
         status_frame = ttk.Frame(self.root)
         status_frame.pack(fill=X, side=BOTTOM, padx=10, pady=5)
 
-        self.status = ttk.Label(status_frame, text="Ready", anchor=W)
+        self.status = ttk.Label(status_frame, text="Ready", anchor=W, font=("Segoe UI", 9, "italic"))
         self.status.pack(side=LEFT, fill=X, expand=True)
 
         self.progress = ttk.Progressbar(
             status_frame,
             mode='determinate',
-            length=250,
+            length=300,
             bootstyle=SUCCESS
         )
         self.progress.pack(side=RIGHT, padx=10)
@@ -215,14 +239,17 @@ class ImageCompressorApp:
     def slider_changed(self, value):
         if not self.smart_var.get():
             value = int(float(value))
-            self.quality_label.configure(text=f"{value}%")
+            # Önceden quality_label tanımlanmış olduğu için artık güvenle çağrılabilir
+            if hasattr(self, 'quality_label'):
+                self.quality_label.configure(text=f"{value}%")
 
     def toggle_smart_mode(self):
         if self.smart_var.get():
             self.quality.state(['disabled'])
-            self.quality_label.configure(text="Auto")
+            self.quality_label.configure(text="Auto", bootstyle=SUCCESS)
         else:
             self.quality.state(['!disabled'])
+            self.quality_label.configure(bootstyle=DEFAULT)
             self.slider_changed(self.quality.get())
 
     def get_smart_quality(self, file_path):
@@ -262,7 +289,9 @@ class ImageCompressorApp:
         orig_size = readable_size(file_size(filename))
 
         self.info.configure(
-            text=f"File : {os.path.basename(filename)}\nResolution : {width} x {height}\nOriginal Size : {orig_size}"
+            text=f"📁 Name: {os.path.basename(filename)}\n"
+                 f"📐 Res: {width}x{height}\n"
+                 f"💽 Size: {orig_size}"
         )
         self.status.configure(text="Image Loaded Successfully")
         self.progress['value'] = 0
@@ -283,8 +312,6 @@ class ImageCompressorApp:
 
         ext = os.path.splitext(self.input_path)[1]
 
-        # Orijinal dosyanın bulunduğu dizini ve önerilen ismi alıp,
-        # benzersiz bir isim ile varsayılan olarak sunuyoruz (unique_filename kullanarak)
         suggested_out_path = unique_filename(
             os.path.join(os.path.dirname(self.input_path), f"compressed_{os.path.basename(self.input_path)}")
         )
@@ -320,15 +347,14 @@ class ImageCompressorApp:
             self.after_image.configure(image=thumb, text="")
             self.after_image.image = thumb
 
-            current_info = self.info.cget("text").split("\nCompressed Size:")[0]
+            current_info = self.info.cget("text").split("\n✅ New Size:")[0]
             new_info = (
                     current_info +
-                    f"\nCompressed Size: {readable_size(comp_size)} (Quality: {quality})" +
-                    f"\nSpace Saved: %{ratio:.2f}"
+                    f"\n✅ New Size: {readable_size(comp_size)} (Q: {quality})\n" +
+                    f"🔥 Saved: %{ratio:.2f}"
             )
             self.info.configure(text=new_info)
 
-            # utils.py modülünü kullanarak kaydediyoruz
             history_record = create_history_item(self.input_path, orig_size, comp_size, ratio)
             save_history(history_record)
 
@@ -359,8 +385,6 @@ class ImageCompressorApp:
 
         for i, file_path in enumerate(files):
             filename = os.path.basename(file_path)
-
-            # utils modülündeki unique_filename kullanılarak üzerine yazma engelleniyor
             out_path = unique_filename(os.path.join(out_dir, f"compressed_{filename}"))
 
             if self.smart_var.get():
@@ -379,7 +403,6 @@ class ImageCompressorApp:
                     ratio = 100 - ((comp_size / orig_size) * 100) if orig_size > 0 else 0
                     total_saved_bytes += (orig_size - comp_size)
 
-                    # utils.py üzerinden kayıt gerçekleştirme
                     history_record = create_history_item(file_path, orig_size, comp_size, ratio)
                     save_history(history_record)
 
@@ -400,10 +423,9 @@ class ImageCompressorApp:
     ####################################################
 
     def show_statistics(self):
-        """utils.py içindeki history verilerini kullanarak arayüzü doldurur."""
         stats_window = ttk.Toplevel(self.root)
         stats_window.title("Compression Statistics")
-        stats_window.geometry("400x380")  # Butonların sığması için biraz yükseltildi
+        stats_window.geometry("400x380")
         stats_window.resizable(False, False)
 
         history_data = load_history()
@@ -441,7 +463,6 @@ class ImageCompressorApp:
         ttk.Label(data_frame, text=readable_size(total_saved), font=("Segoe UI", 12, "bold"), bootstyle=SUCCESS).grid(
             row=4, column=1, sticky=E, pady=5)
 
-        # Temizleme ve Kapatma Butonları
         def on_clear():
             if messagebox.askyesno("Confirm", "Are you sure you want to clear all history?"):
                 clear_history()
