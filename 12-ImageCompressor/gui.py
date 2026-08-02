@@ -12,7 +12,6 @@ try:
     HAS_DND = True
 
 
-    # ttkbootstrap Window'u ve TkinterDnD Wrapper'ı birleştiren özel sınıf
     class CustomWindow(ttk.Window, TkinterDnD.DnDWrapper):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -23,7 +22,6 @@ except ImportError:
 
 from compressor import ImageCompressor
 
-# utils.py modülünden projenizde yazılmış tüm gerekli fonksiyonları dahil ediyoruz
 from utils import (
     create_thumbnail,
     file_size,
@@ -60,8 +58,12 @@ class ImageCompressorApp:
 
     def build_ui(self):
         self.create_topbar()
+        ttk.Separator(self.root).pack(fill=X, padx=15)  # Üst menü ayrıştırıcısı
+
         self.create_preview_area()
         self.create_controls()
+
+        ttk.Separator(self.root).pack(fill=X, padx=15, pady=(10, 0))  # Durum çubuğu ayrıştırıcısı
         self.create_statusbar()
 
     def setup_dnd(self):
@@ -76,7 +78,7 @@ class ImageCompressorApp:
     ####################################################
 
     def create_topbar(self):
-        frame = ttk.Frame(self.root, padding=15)
+        frame = ttk.Frame(self.root, padding=(15, 15, 15, 10))
         frame.pack(fill=X)
 
         title = ttk.Label(
@@ -91,7 +93,7 @@ class ImageCompressorApp:
             text="📊 Statistics",
             bootstyle="info-outline",
             command=self.show_statistics
-        ).pack(side=LEFT, padx=20)
+        ).pack(side=LEFT, padx=25)
 
         theme_frame = ttk.Frame(frame)
         theme_frame.pack(side=RIGHT)
@@ -100,7 +102,7 @@ class ImageCompressorApp:
             theme_frame,
             text="☀️ Light",
             bootstyle=INFO,
-            command=lambda: self.change_theme("litera")
+            command=lambda: self.change_theme("cosmo")
         ).pack(side=LEFT, padx=5)
 
         ttk.Button(
@@ -112,15 +114,16 @@ class ImageCompressorApp:
 
     def create_preview_area(self):
         frame = ttk.Frame(self.root)
-        frame.pack(fill=BOTH, expand=True, padx=15, pady=5)
+        frame.pack(fill=BOTH, expand=True, padx=15, pady=15)
 
+        # Önizleme Çerçeveleri
         self.before_frame = ttk.Labelframe(
             frame,
-            text=" Original Image (Drag & Drop Here) ",
+            text=" Original Image ",
             padding=10,
             bootstyle=INFO
         )
-        self.before_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=10)
+        self.before_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10))
 
         self.after_frame = ttk.Labelframe(
             frame,
@@ -128,28 +131,48 @@ class ImageCompressorApp:
             padding=10,
             bootstyle=SUCCESS
         )
-        self.after_frame.pack(side=RIGHT, fill=BOTH, expand=True, padx=10)
+        self.after_frame.pack(side=RIGHT, fill=BOTH, expand=True, padx=(10, 0))
 
-        self.before_image = ttk.Label(self.before_frame, text="Waiting for image...", font=("Segoe UI", 12))
+        # Tıklanabilir Boş Alan Tasarımı
+        self.before_image = ttk.Label(
+            self.before_frame,
+            text="📥\nDrag & Drop Image Here\n— or Click to Browse —",
+            font=("Segoe UI", 13),
+            justify=CENTER,
+            foreground="gray",
+            cursor="hand2"  # Üzerine gelince fare imleci değişir
+        )
         self.before_image.pack(expand=True)
+        self.before_image.bind("<Button-1>", lambda e: self.select_image())  # Tıklama olayı
 
-        self.after_image = ttk.Label(self.after_frame, text="Preview will appear here", font=("Segoe UI", 12))
+        self.after_image = ttk.Label(
+            self.after_frame,
+            text="✨\nCompressed Preview",
+            font=("Segoe UI", 13),
+            justify=CENTER,
+            foreground="gray"
+        )
         self.after_image.pack(expand=True)
 
     def create_controls(self):
-        main_control_frame = ttk.Frame(self.root, padding=15)
+        # Grid sistemi ile daha simetrik bir kontrol paneli
+        main_control_frame = ttk.Frame(self.root, padding=(15, 5))
         main_control_frame.pack(fill=X)
+
+        main_control_frame.columnconfigure(0, weight=0)
+        main_control_frame.columnconfigure(1, weight=0)
+        main_control_frame.columnconfigure(2, weight=1)  # Bilgi ekranı boşluğu doldursun
 
         # 1. ACTIONS FRAME
         actions_frame = ttk.Labelframe(main_control_frame, text=" 🛠️ Actions ", padding=15)
-        actions_frame.pack(side=LEFT, fill=Y, padx=10)
+        actions_frame.grid(row=0, column=0, sticky=NSEW, padx=(0, 10))
 
         ttk.Button(
             actions_frame,
             text="📁 Select",
             bootstyle=PRIMARY,
             command=self.select_image,
-            width=12
+            width=10
         ).pack(side=LEFT, padx=5)
 
         ttk.Button(
@@ -157,7 +180,7 @@ class ImageCompressorApp:
             text="✨ Compress",
             bootstyle=SUCCESS,
             command=self.compress_image,
-            width=12
+            width=10
         ).pack(side=LEFT, padx=5)
 
         ttk.Button(
@@ -165,12 +188,12 @@ class ImageCompressorApp:
             text="📦 Batch",
             bootstyle=WARNING,
             command=self.batch_compress,
-            width=12
+            width=10
         ).pack(side=LEFT, padx=5)
 
         # 2. SETTINGS FRAME
         settings_frame = ttk.Labelframe(main_control_frame, text=" ⚙️ Settings ", padding=15)
-        settings_frame.pack(side=LEFT, fill=Y, padx=10)
+        settings_frame.grid(row=0, column=1, sticky=NSEW, padx=10)
 
         self.smart_var = tk.BooleanVar(value=False)
         self.smart_switch = ttk.Checkbutton(
@@ -180,14 +203,13 @@ class ImageCompressorApp:
             bootstyle="success-round-toggle",
             command=self.toggle_smart_mode
         )
-        self.smart_switch.pack(side=LEFT, padx=10)
+        self.smart_switch.pack(side=LEFT, padx=(0, 15))
 
         ttk.Separator(settings_frame, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=10)
 
-        ttk.Label(settings_frame, text="Quality:").pack(side=LEFT, padx=(5, 0))
+        ttk.Label(settings_frame, text="Quality:").pack(side=LEFT, padx=(5, 5))
 
-        # Hata Çözümü: Label'ı Scale'den ÖNCE oluşturuyoruz.
-        self.quality_label = ttk.Label(settings_frame, text="80%", font=("Segoe UI", 10, "bold"))
+        self.quality_label = ttk.Label(settings_frame, text="80%", font=("Segoe UI", 11, "bold"))
 
         self.quality = ttk.Scale(
             settings_frame,
@@ -195,28 +217,28 @@ class ImageCompressorApp:
             to=100,
             orient=HORIZONTAL,
             command=self.slider_changed,
-            length=130
+            length=120
         )
         self.quality.set(80)
 
-        # Ekrana yerleştirme (pack) sırası normal şekilde devam ediyor
         self.quality.pack(side=LEFT, padx=10)
-        self.quality_label.pack(side=LEFT)
+        self.quality_label.pack(side=LEFT, padx=(0, 5))
 
         # 3. DETAILS FRAME
-        details_frame = ttk.Labelframe(main_control_frame, text=" 📄 Image Details ", padding=15)
-        details_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=10)
+        details_frame = ttk.Labelframe(main_control_frame, text=" 📄 Image Details ", padding=15, bootstyle=INFO)
+        details_frame.grid(row=0, column=2, sticky=NSEW, padx=(10, 0))
 
         self.info = ttk.Label(
             details_frame,
             text="No image selected.",
-            font=("Segoe UI", 10)
+            font=("Segoe UI", 10),
+            foreground="gray"
         )
         self.info.pack(side=LEFT, anchor=NW)
 
     def create_statusbar(self):
-        status_frame = ttk.Frame(self.root)
-        status_frame.pack(fill=X, side=BOTTOM, padx=10, pady=5)
+        status_frame = ttk.Frame(self.root, padding=(15, 10))
+        status_frame.pack(fill=X, side=BOTTOM)
 
         self.status = ttk.Label(status_frame, text="Ready", anchor=W, font=("Segoe UI", 9, "italic"))
         self.status.pack(side=LEFT, fill=X, expand=True)
@@ -224,10 +246,10 @@ class ImageCompressorApp:
         self.progress = ttk.Progressbar(
             status_frame,
             mode='determinate',
-            length=300,
+            length=350,
             bootstyle=SUCCESS
         )
-        self.progress.pack(side=RIGHT, padx=10)
+        self.progress.pack(side=RIGHT)
 
     ####################################################
     # 2. YARDIMCI FONKSİYONLAR
@@ -236,10 +258,17 @@ class ImageCompressorApp:
     def change_theme(self, theme):
         self.root.style.theme_use(theme)
 
+        # Tema değişince placeholder renklerini güncelle
+        if not self.input_path:
+            fg_color = "gray" if theme == "darkly" else "dim gray"
+            self.before_image.configure(foreground=fg_color)
+            self.after_image.configure(foreground=fg_color)
+            if "No image" in self.info.cget("text"):
+                self.info.configure(foreground=fg_color)
+
     def slider_changed(self, value):
         if not self.smart_var.get():
             value = int(float(value))
-            # Önceden quality_label tanımlanmış olduğu için artık güvenle çağrılabilir
             if hasattr(self, 'quality_label'):
                 self.quality_label.configure(text=f"{value}%")
 
@@ -280,9 +309,11 @@ class ImageCompressorApp:
     def load_image_to_ui(self, filename):
         self.input_path = filename
         thumb = create_thumbnail(filename)
-        self.before_image.configure(image=thumb, text="")
+
+        self.before_image.configure(image=thumb, text="", cursor="arrow")  # Resim yüklenince texti ve imleci sil
         self.before_image.image = thumb
-        self.after_image.configure(image='', text="Compressed Preview")
+
+        self.after_image.configure(image='', text="✨\nCompressed Preview", font=("Segoe UI", 13))
         self.after_image.image = None
 
         width, height = image_resolution(filename)
@@ -291,7 +322,8 @@ class ImageCompressorApp:
         self.info.configure(
             text=f"📁 Name: {os.path.basename(filename)}\n"
                  f"📐 Res: {width}x{height}\n"
-                 f"💽 Size: {orig_size}"
+                 f"💽 Size: {orig_size}",
+            foreground=DEFAULT  # Metin rengini normale döndür
         )
         self.status.configure(text="Image Loaded Successfully")
         self.progress['value'] = 0
