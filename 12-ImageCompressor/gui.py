@@ -155,43 +155,46 @@ class ImageCompressorApp:
         self.after_image.pack(expand=True)
 
     def create_controls(self):
-        # Grid sistemi ile daha simetrik bir kontrol paneli
-        main_control_frame = ttk.Frame(self.root, padding=(15, 5))
+        # Grid sistemi ile daha simetrik ve esnek bir kontrol paneli
+        main_control_frame = ttk.Frame(self.root, padding=(15, 10))
         main_control_frame.pack(fill=X)
 
+        # Sütun ağırlıklarını ayarlıyoruz ki pencereler eşit ve esnek dağılsın
         main_control_frame.columnconfigure(0, weight=0)
         main_control_frame.columnconfigure(1, weight=0)
-        main_control_frame.columnconfigure(2, weight=1)  # Bilgi ekranı boşluğu doldursun
+        main_control_frame.columnconfigure(2, weight=1)
 
+        # ==========================================
         # 1. ACTIONS FRAME
+        # ==========================================
         actions_frame = ttk.Labelframe(main_control_frame, text=" 🛠️ Actions ", padding=15)
         actions_frame.grid(row=0, column=0, sticky=NSEW, padx=(0, 10))
 
+        # Buton genişliklerini (width) artırdık veya kaldırdık ki yazılar kesilmesin
         ttk.Button(
             actions_frame,
             text="📁 Select",
             bootstyle=PRIMARY,
-            command=self.select_image,
-            width=10
-        ).pack(side=LEFT, padx=5)
+            command=self.select_image
+        ).pack(side=LEFT, padx=5, fill=X, expand=True)
 
         ttk.Button(
             actions_frame,
             text="✨ Compress",
             bootstyle=SUCCESS,
-            command=self.compress_image,
-            width=10
-        ).pack(side=LEFT, padx=5)
+            command=self.compress_image
+        ).pack(side=LEFT, padx=5, fill=X, expand=True)
 
         ttk.Button(
             actions_frame,
             text="📦 Batch",
             bootstyle=WARNING,
-            command=self.batch_compress,
-            width=10
-        ).pack(side=LEFT, padx=5)
+            command=self.batch_compress
+        ).pack(side=LEFT, padx=5, fill=X, expand=True)
 
+        # ==========================================
         # 2. SETTINGS FRAME
+        # ==========================================
         settings_frame = ttk.Labelframe(main_control_frame, text=" ⚙️ Settings ", padding=15)
         settings_frame.grid(row=0, column=1, sticky=NSEW, padx=10)
 
@@ -224,7 +227,9 @@ class ImageCompressorApp:
         self.quality.pack(side=LEFT, padx=10)
         self.quality_label.pack(side=LEFT, padx=(0, 5))
 
+        # ==========================================
         # 3. DETAILS FRAME
+        # ==========================================
         details_frame = ttk.Labelframe(main_control_frame, text=" 📄 Image Details ", padding=15, bootstyle=INFO)
         details_frame.grid(row=0, column=2, sticky=NSEW, padx=(10, 0))
 
@@ -232,8 +237,10 @@ class ImageCompressorApp:
             details_frame,
             text="No image selected.",
             font=("Segoe UI", 10),
-            foreground="gray"
+            foreground="gray",
+            justify=LEFT
         )
+        self.info.pack(side=LEFT, anchor=NW, expand=True, fill=BOTH)
         self.info.pack(side=LEFT, anchor=NW)
 
     def create_statusbar(self):
