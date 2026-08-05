@@ -45,11 +45,12 @@ class ImageCompressorApp:
         self.output_path = None
 
         self.root = CustomWindow(
-            title="Image Compressor",
+            title="Image Compressor Pro",
             themename="darkly",
-            size=(1150, 780),
-            resizable=(False, False)
+            size=(1250, 750),  # Sidebar düzenine uygun biraz daha geniş
+            resizable=(True, True)  # Artık yeniden boyutlandırılabilir
         )
+        self.root.minsize(1000, 650)
 
         self.build_ui()
         self.setup_dnd()
@@ -59,10 +60,16 @@ class ImageCompressorApp:
 
     def build_ui(self):
         self.create_topbar()
-        ttk.Separator(self.root).pack(fill=X, padx=15)
-        self.create_preview_area()
-        self.create_controls()
-        ttk.Separator(self.root).pack(fill=X, padx=15, pady=(10, 0))
+        ttk.Separator(self.root).pack(fill=X)
+
+        # Ana Konteyner: Sol Sidebar ve Sağ Önizleme Alanını tutacak
+        self.main_container = ttk.Frame(self.root, padding=15)
+        self.main_container.pack(fill=BOTH, expand=True)
+
+        self.create_sidebar(self.main_container)
+        self.create_preview_area(self.main_container)
+
+        ttk.Separator(self.root).pack(fill=X)
         self.create_statusbar()
 
     def setup_dnd(self):
@@ -77,10 +84,10 @@ class ImageCompressorApp:
     ####################################################
 
     def create_topbar(self):
-        frame = ttk.Frame(self.root, padding=(15, 15, 15, 10))
+        frame = ttk.Frame(self.root, padding=(15, 12))
         frame.pack(fill=X)
 
-        title = ttk.Label(frame, text="🖼️ Image Compressor", font=("Segoe UI", 22, "bold"))
+        title = ttk.Label(frame, text="🖼️ Image Compressor", font=("Segoe UI", 20, "bold"))
         title.pack(side=LEFT)
 
         ttk.Button(
@@ -98,23 +105,75 @@ class ImageCompressorApp:
             theme_frame, text="🌙 Dark", bootstyle=SECONDARY, command=lambda: self.change_theme("darkly")
         ).pack(side=LEFT)
 
-    def create_preview_area(self):
-        frame = ttk.Frame(self.root)
-        frame.pack(fill=BOTH, expand=True, padx=15, pady=15)
+    def create_sidebar(self, parent):
+        """Yeni Kenar Çubuğu Düzeni (Sidebar)"""
+        sidebar = ttk.Frame(parent, width=300)
+        sidebar.pack(side=LEFT, fill=Y, padx=(0, 15))
+        sidebar.pack_propagate(False)  # Sidebar genişliğini sabit tutar
 
-        self.before_frame = ttk.Labelframe(frame, text=" Original Image ", padding=10, bootstyle=INFO)
+        # 1. ACTIONS FRAME
+        actions_frame = ttk.Labelframe(sidebar, text=" 🛠️ Actions ", padding=15)
+        actions_frame.pack(fill=X, pady=(0, 15))
+
+        ttk.Button(actions_frame, text="📁 Select Image", bootstyle=PRIMARY, command=self.select_image).pack(fill=X,
+                                                                                                            pady=(0, 8))
+        ttk.Button(actions_frame, text="✨ Compress", bootstyle=SUCCESS, command=self.compress_image).pack(fill=X,
+                                                                                                          pady=(0, 8))
+        ttk.Button(actions_frame, text="📦 Batch Compress", bootstyle=WARNING, command=self.batch_compress).pack(fill=X)
+
+        # 2. SETTINGS FRAME
+        settings_frame = ttk.Labelframe(sidebar, text=" ⚙️ Settings ", padding=15)
+        settings_frame.pack(fill=X, pady=(0, 15))
+
+        self.smart_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(settings_frame, text="Smart Compression Mode", variable=self.smart_var,
+                        bootstyle="success-round-toggle", command=self.toggle_smart_mode).pack(anchor=W, pady=(0, 10))
+
+        self.exif_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(settings_frame, text="Keep EXIF Metadata", variable=self.exif_var,
+                        bootstyle="info-round-toggle").pack(anchor=W, pady=(0, 15))
+
+        ttk.Label(settings_frame, text="Output Format:").pack(anchor=W, pady=(0, 2))
+        self.format_var = tk.StringVar(value="Original")
+        self.format_cb = ttk.Combobox(settings_frame, textvariable=self.format_var,
+                                      values=["Original", "JPG", "PNG", "WEBP"], state="readonly")
+        self.format_cb.pack(fill=X, pady=(0, 15))
+
+        q_frame = ttk.Frame(settings_frame)
+        q_frame.pack(fill=X)
+        ttk.Label(q_frame, text="Quality:").pack(side=LEFT)
+        self.quality_label = ttk.Label(q_frame, text="80%", font=("Segoe UI", 10, "bold"))
+        self.quality_label.pack(side=RIGHT)
+
+        self.quality = ttk.Scale(settings_frame, from_=1, to=100, orient=HORIZONTAL, command=self.slider_changed)
+        self.quality.set(80)
+        self.quality.pack(fill=X, pady=(5, 0))
+
+        # 3. DETAILS FRAME
+        details_frame = ttk.Labelframe(sidebar, text=" 📄 Image Details ", padding=15, bootstyle=INFO)
+        details_frame.pack(fill=BOTH, expand=True)
+
+        self.info = ttk.Label(details_frame, text="No image selected.", font=("Segoe UI", 10), foreground="gray",
+                              justify=LEFT, wraplength=250)
+        self.info.pack(anchor=NW)
+
+    def create_preview_area(self, parent):
+        """Sağ taraftaki genişletilmiş önizleme alanı"""
+        preview_container = ttk.Frame(parent)
+        preview_container.pack(side=LEFT, fill=BOTH, expand=True)
+
+        self.before_frame = ttk.Labelframe(preview_container, text=" Original Image ", padding=10, bootstyle=INFO)
         self.before_frame.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10))
 
-        self.after_frame = ttk.Labelframe(frame, text=" Compressed Image ", padding=10, bootstyle=SUCCESS)
-        self.after_frame.pack(side=RIGHT, fill=BOTH, expand=True, padx=(10, 0))
+        self.after_frame = ttk.Labelframe(preview_container, text=" Compressed Image ", padding=10, bootstyle=SUCCESS)
+        self.after_frame.pack(side=RIGHT, fill=BOTH, expand=True)
 
         self.before_image = ttk.Label(
             self.before_frame,
             text="📥\nDrag & Drop Image Here\n— or Click to Browse —",
-            font=("Segoe UI", 13), justify=CENTER, foreground="gray", cursor="hand2"
+            font=("Segoe UI", 14), justify=CENTER, foreground="gray", cursor="hand2"
         )
         self.before_image.pack(expand=True)
-        # Resim yoksa seçtir, varsa zoom yap
         self.before_image.bind("<Button-1>",
                                lambda e: self.select_image() if not self.input_path else self.show_image_preview(
                                    self.input_path, "Original Image"))
@@ -122,78 +181,9 @@ class ImageCompressorApp:
         self.after_image = ttk.Label(
             self.after_frame,
             text="✨\nCompressed Preview",
-            font=("Segoe UI", 13), justify=CENTER, foreground="gray"
+            font=("Segoe UI", 14), justify=CENTER, foreground="gray"
         )
         self.after_image.pack(expand=True)
-
-    def create_controls(self):
-        main_control_frame = ttk.Frame(self.root, padding=(15, 10))
-        main_control_frame.pack(fill=X)
-        main_control_frame.columnconfigure(0, weight=0)
-        main_control_frame.columnconfigure(1, weight=0)
-        main_control_frame.columnconfigure(2, weight=1)
-
-        # 1. ACTIONS FRAME
-        actions_frame = ttk.Labelframe(main_control_frame, text=" 🛠️ Actions ", padding=15)
-        actions_frame.grid(row=0, column=0, sticky=NSEW, padx=(0, 10))
-
-        ttk.Button(actions_frame, text="📁 Select", bootstyle=PRIMARY, command=self.select_image).pack(side=LEFT, padx=5,
-                                                                                                      fill=X,
-                                                                                                      expand=True)
-        ttk.Button(actions_frame, text="✨ Compress", bootstyle=SUCCESS, command=self.compress_image).pack(side=LEFT,
-                                                                                                          padx=5,
-                                                                                                          fill=X,
-                                                                                                          expand=True)
-        ttk.Button(actions_frame, text="📦 Batch", bootstyle=WARNING, command=self.batch_compress).pack(side=LEFT,
-                                                                                                       padx=5, fill=X,
-                                                                                                       expand=True)
-
-        # 2. SETTINGS FRAME (Format, EXIF ve Kalite eklendi)
-        settings_frame = ttk.Labelframe(main_control_frame, text=" ⚙️ Settings ", padding=10)
-        settings_frame.grid(row=0, column=1, sticky=NSEW, padx=10)
-
-        # Üst Satır: Toggles
-        toggles_frame = ttk.Frame(settings_frame)
-        toggles_frame.pack(fill=X, pady=(0, 5))
-
-        self.smart_var = tk.BooleanVar(value=False)
-        self.smart_switch = ttk.Checkbutton(toggles_frame, text="Smart Mode", variable=self.smart_var,
-                                            bootstyle="success-round-toggle", command=self.toggle_smart_mode)
-        self.smart_switch.pack(side=LEFT, padx=(0, 15))
-
-        self.exif_var = tk.BooleanVar(value=True)
-        self.exif_switch = ttk.Checkbutton(toggles_frame, text="Keep EXIF", variable=self.exif_var,
-                                           bootstyle="info-round-toggle")
-        self.exif_switch.pack(side=LEFT)
-
-        ttk.Separator(settings_frame, orient=HORIZONTAL).pack(fill=X, pady=5)
-
-        # Alt Satır: Format ve Slider
-        bottom_settings = ttk.Frame(settings_frame)
-        bottom_settings.pack(fill=X)
-
-        ttk.Label(bottom_settings, text="Format:").pack(side=LEFT)
-        self.format_var = tk.StringVar(value="Original")
-        self.format_cb = ttk.Combobox(bottom_settings, textvariable=self.format_var,
-                                      values=["Original", "JPG", "PNG", "WEBP"], state="readonly", width=8)
-        self.format_cb.pack(side=LEFT, padx=(5, 15))
-
-        ttk.Label(bottom_settings, text="Quality:").pack(side=LEFT, padx=(0, 5))
-        self.quality_label = ttk.Label(bottom_settings, text="80%", font=("Segoe UI", 11, "bold"), width=4)
-        self.quality = ttk.Scale(bottom_settings, from_=1, to=100, orient=HORIZONTAL, command=self.slider_changed,
-                                 length=100)
-        self.quality.set(80)
-
-        self.quality.pack(side=LEFT, padx=5)
-        self.quality_label.pack(side=LEFT)
-
-        # 3. DETAILS FRAME
-        details_frame = ttk.Labelframe(main_control_frame, text=" 📄 Image Details ", padding=15, bootstyle=INFO)
-        details_frame.grid(row=0, column=2, sticky=NSEW, padx=(10, 0))
-
-        self.info = ttk.Label(details_frame, text="No image selected.", font=("Segoe UI", 10), foreground="gray",
-                              justify=LEFT)
-        self.info.pack(side=LEFT, anchor=NW, expand=True, fill=BOTH)
 
     def create_statusbar(self):
         status_frame = ttk.Frame(self.root, padding=(15, 10))
@@ -202,7 +192,7 @@ class ImageCompressorApp:
         self.status = ttk.Label(status_frame, text="Ready", anchor=W, font=("Segoe UI", 9, "italic"))
         self.status.pack(side=LEFT, fill=X, expand=True)
 
-        self.progress = ttk.Progressbar(status_frame, mode='determinate', length=350, bootstyle=SUCCESS)
+        self.progress = ttk.Progressbar(status_frame, mode='determinate', length=400, bootstyle=SUCCESS)
         self.progress.pack(side=RIGHT)
 
     ####################################################
@@ -210,7 +200,6 @@ class ImageCompressorApp:
     ####################################################
 
     def show_image_preview(self, path, title_text):
-        """Resme tıklandığında büyük haliyle yeni pencerede açar (Zoom)"""
         if not path or not os.path.exists(path): return
 
         top = ttk.Toplevel(self.root)
@@ -238,7 +227,7 @@ class ImageCompressorApp:
                 self.info.configure(foreground=fg_color)
 
     def slider_changed(self, value):
-        if not self.smart_var.get():
+        if hasattr(self, 'smart_var') and not self.smart_var.get():
             value = int(float(value))
             if hasattr(self, 'quality_label'):
                 self.quality_label.configure(text=f"{value}%")
@@ -274,7 +263,7 @@ class ImageCompressorApp:
                 messagebox.showerror("Error", "Unsupported image file format.")
 
     ####################################################
-    # 3. İŞLEMLER (MULTITHREADING EKLENDİ)
+    # 3. İŞLEMLER (MULTITHREADING)
     ####################################################
 
     def load_image_to_ui(self, filename):
@@ -284,15 +273,14 @@ class ImageCompressorApp:
         self.before_image.configure(image=thumb, text="")
         self.before_image.image = thumb
 
-        self.after_image.configure(image='', text="✨\nCompressed Preview", font=("Segoe UI", 13), cursor="arrow")
+        self.after_image.configure(image='', text="✨\nCompressed Preview", font=("Segoe UI", 14), cursor="arrow")
         self.after_image.image = None
-        # Önceki Tıklamaları Sıfırla (Zoom Ataması create_preview_area içinde halledildi)
 
         width, height = image_resolution(filename)
         orig_size = readable_size(file_size(filename))
 
         self.info.configure(
-            text=f"📁 Name: {os.path.basename(filename)}\n📐 Res: {width}x{height}\n💽 Size: {orig_size}",
+            text=f"📁 Name:\n{os.path.basename(filename)}\n\n📐 Resolution:\n{width}x{height}\n\n💽 Original Size:\n{orig_size}",
             foreground=DEFAULT
         )
         self.status.configure(text="Image Loaded Successfully")
@@ -310,7 +298,6 @@ class ImageCompressorApp:
             messagebox.showwarning("Warning", "Please select or drop an image first.")
             return
 
-        # Format Dönüştürme Kontrolü
         selected_format = self.format_var.get()
         target_fmt = f".{selected_format.lower()}" if selected_format != "Original" else None
 
@@ -329,12 +316,11 @@ class ImageCompressorApp:
         self.output_path = out_path
 
         quality = self.get_smart_quality(self.input_path) if self.smart_var.get() else int(float(self.quality.get()))
-        self.compressor.keep_exif = self.exif_var.get()  # EXIF Ayarını Aktar
+        self.compressor.keep_exif = self.exif_var.get()
 
         self.status.configure(text=f"Compressing... (Quality: {quality})")
         self.progress.start(15)
 
-        # UI Donmasını Engellemek İçin Threading Kullanıyoruz
         def task():
             try:
                 self.compressor.compress(self.input_path, self.output_path, quality=quality, target_format=target_fmt)
@@ -345,7 +331,6 @@ class ImageCompressorApp:
                 history_record = create_history_item(self.input_path, orig_size, comp_size, ratio)
                 save_history(history_record)
 
-                # UI güncellemeleri ana thread'e yönlendirilmeli
                 self.root.after(0, self._compress_success_ui, comp_size, ratio, quality)
             except Exception as e:
                 self.root.after(0, self._compress_error_ui, str(e))
@@ -361,9 +346,9 @@ class ImageCompressorApp:
         self.after_image.image = thumb
         self.after_image.bind("<Button-1>", lambda e: self.show_image_preview(self.output_path, "Compressed Image"))
 
-        current_info = self.info.cget("text").split("\n✅ New Size:")[0]
+        current_info = self.info.cget("text").split("\n\n✅ New Size:")[0]
         self.info.configure(
-            text=current_info + f"\n✅ New Size: {readable_size(comp_size)} (Q: {quality})\n🔥 Saved: %{ratio:.2f}")
+            text=current_info + f"\n\n✅ New Size:\n{readable_size(comp_size)} (Q: {quality})\n\n🔥 Space Saved:\n%{ratio:.2f}")
         self.status.configure(text=f"Compression successful! Saved %{ratio:.2f}")
 
     def _compress_error_ui(self, error_msg):
@@ -385,7 +370,7 @@ class ImageCompressorApp:
 
         selected_format = self.format_var.get()
         target_fmt = f".{selected_format.lower()}" if selected_format != "Original" else None
-        self.compressor.keep_exif = self.exif_var.get()  # EXIF Ayarını Aktar
+        self.compressor.keep_exif = self.exif_var.get()
 
         def task():
             success_count = 0
