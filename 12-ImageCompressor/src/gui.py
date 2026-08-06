@@ -22,8 +22,8 @@ except ImportError:
     HAS_DND = False
     CustomWindow = ttk.Window
 
-from compressor import ImageCompressor
-from utils import (
+from src.compressor import ImageCompressor
+from src.utils import (
     create_thumbnail,
     file_size,
     readable_size,
@@ -47,8 +47,8 @@ class ImageCompressorApp:
         self.root = CustomWindow(
             title="Image Compressor Pro",
             themename="darkly",
-            size=(1250, 750),  # Sidebar düzenine uygun biraz daha geniş
-            resizable=(True, True)  # Artık yeniden boyutlandırılabilir
+            size=(1250, 750),
+            resizable=(True, True)
         )
         self.root.minsize(1000, 650)
 
@@ -62,7 +62,6 @@ class ImageCompressorApp:
         self.create_topbar()
         ttk.Separator(self.root).pack(fill=X)
 
-        # Ana Konteyner: Sol Sidebar ve Sağ Önizleme Alanını tutacak
         self.main_container = ttk.Frame(self.root, padding=15)
         self.main_container.pack(fill=BOTH, expand=True)
 
@@ -106,10 +105,9 @@ class ImageCompressorApp:
         ).pack(side=LEFT)
 
     def create_sidebar(self, parent):
-        """Yeni Kenar Çubuğu Düzeni (Sidebar)"""
         sidebar = ttk.Frame(parent, width=300)
         sidebar.pack(side=LEFT, fill=Y, padx=(0, 15))
-        sidebar.pack_propagate(False)  # Sidebar genişliğini sabit tutar
+        sidebar.pack_propagate(False)
 
         # 1. ACTIONS FRAME
         actions_frame = ttk.Labelframe(sidebar, text=" 🛠️ Actions ", padding=15)
@@ -158,7 +156,6 @@ class ImageCompressorApp:
         self.info.pack(anchor=NW)
 
     def create_preview_area(self, parent):
-        """Sağ taraftaki genişletilmiş önizleme alanı"""
         preview_container = ttk.Frame(parent)
         preview_container.pack(side=LEFT, fill=BOTH, expand=True)
 
@@ -470,8 +467,3 @@ class ImageCompressorApp:
         ttk.Button(button_frame, text="Clear History", command=on_clear, bootstyle=DANGER).pack(side=LEFT, padx=10)
         ttk.Button(button_frame, text="Close", command=stats_window.destroy, bootstyle=SECONDARY).pack(side=LEFT,
                                                                                                        padx=10)
-
-
-if __name__ == "__main__":
-    app = ImageCompressorApp()
-    app.run()
