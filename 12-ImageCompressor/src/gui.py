@@ -1,4 +1,5 @@
 import os
+import json
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -22,8 +23,8 @@ except ImportError:
     HAS_DND = False
     CustomWindow = ttk.Window
 
-from src.compressor import ImageCompressor
-from src.utils import (
+from compressor import ImageCompressor
+from utils import (
     create_thumbnail,
     file_size,
     readable_size,
@@ -33,7 +34,8 @@ from src.utils import (
     create_history_item,
     load_history,
     clear_history,
-    unique_filename
+    unique_filename,
+    DATA_DIR
 )
 
 
@@ -44,19 +46,72 @@ class ImageCompressorApp:
         self.input_path = None
         self.output_path = None
 
+        # Ayarların tutulacağı yapılandırma dosyası
+        self.config_file = os.path.join(DATA_DIR, "config.json")
+        self.config = self.load_config()
+
         self.root = CustomWindow(
             title="Image Compressor Pro",
-            themename="darkly",
+            themename=self.config["theme"],
             size=(1250, 750),
             resizable=(True, True)
         )
         self.root.minsize(1000, 650)
+
+        # Uygulama kapatıldığında ayarları kaydetmek için bağlama yapıyoruz
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         self.build_ui()
         self.setup_dnd()
 
     def run(self):
         self.root.mainloop()
+
+    ####################################################
+    # CONFIG (AYARLARI KAYDETME VE YÜKLEME)
+    ####################################################
+
+    def load_config(self):
+        """Kullanıcının son ayarlarını yükler veya varsayılanları döndürür."""
+        default_config = {
+            "theme": "darkly",
+            "smart_mode": False,
+            "keep_exif": True,
+            "format": "Original",
+            "quality": 80
+        }
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    user_config = json.load(f)
+                    default_config.update(user_config)
+            except Exception:
+                pass
+        return default_config
+
+    def save_config(self):
+        """Uygulama kapanırken mevcut ayarları config dosyasına kaydeder."""
+        config = {
+            "theme": self.root.style.theme.name,
+            "smart_mode": self.smart_var.get(),
+            "keep_exif": self.exif_var.get(),
+            "format": self.format_var.get(),
+            "quality": int(float(self.quality.get()))
+        }
+        try:
+            with open(self.config_file, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=4)
+        except Exception as e:
+            print(f"Error saving config: {e}")
+
+    def on_closing(self):
+        """Uygulama kapanış tetikleyicisi"""
+        self.save_config()
+        self.root.destroy()
+
+    ####################################################
+    # 1. ARAYÜZ (UI) OLUŞTURMA
+    ####################################################
 
     def build_ui(self):
         self.create_topbar()
@@ -77,10 +132,6 @@ class ImageCompressorApp:
             self.root.dnd_bind('<<Drop>>', self.handle_drop)
         else:
             self.status.configure(text="Ready (Install 'tkinterdnd2' for Drag & Drop support)")
-
-    ####################################################
-    # 1. ARAYÜZ (UI) OLUŞTURMA
-    ####################################################
 
     def create_topbar(self):
         frame = ttk.Frame(self.root, padding=(15, 12))
@@ -117,22 +168,29 @@ class ImageCompressorApp:
                                                                                                             pady=(0, 8))
         ttk.Button(actions_frame, text="✨ Compress", bootstyle=SUCCESS, command=self.compress_image).pack(fill=X,
                                                                                                           pady=(0, 8))
-        ttk.Button(actions_frame, text="📦 Batch Compress", bootstyle=WARNING, command=self.batch_compress).pack(fill=X)
+        ttk.Button(actions_frame, text="📦 Batch Compress", bootstyle=INFO, command=self.batch_compress).pack(fill=X,
+                                                                                                             pady=(0,
+                                                                                                                   8))
+
+        # TEMİZLE BUTONU
+        ttk.Button(actions_frame, text="🗑️ Clear", bootstyle=DANGER, command=self.clear_ui).pack(fill=X)
 
         # 2. SETTINGS FRAME
         settings_frame = ttk.Labelframe(sidebar, text=" ⚙️ Settings ", padding=15)
         settings_frame.pack(fill=X, pady=(0, 15))
 
-        self.smart_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(settings_frame, text="Smart Compression Mode", variable=self.smart_var,
-                        bootstyle="success-round-toggle", command=self.toggle_smart_mode).pack(anchor=W, pady=(0, 10))
+        self.smart_var = tk.BooleanVar(value=self.config["smart_mode"])
+        self.smart_switch = ttk.Checkbutton(settings_frame, text="Smart Compression Mode", variable=self.smart_var,
+                                            bootstyle="success-round-toggle", command=self.toggle_smart_mode)
+        self.smart_switch.pack(anchor=W, pady=(0, 10))
 
-        self.exif_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(settings_frame, text="Keep EXIF Metadata", variable=self.exif_var,
-                        bootstyle="info-round-toggle").pack(anchor=W, pady=(0, 15))
+        self.exif_var = tk.BooleanVar(value=self.config["keep_exif"])
+        self.exif_switch = ttk.Checkbutton(settings_frame, text="Keep EXIF Metadata", variable=self.exif_var,
+                                           bootstyle="info-round-toggle")
+        self.exif_switch.pack(anchor=W, pady=(0, 15))
 
         ttk.Label(settings_frame, text="Output Format:").pack(anchor=W, pady=(0, 2))
-        self.format_var = tk.StringVar(value="Original")
+        self.format_var = tk.StringVar(value=self.config["format"])
         self.format_cb = ttk.Combobox(settings_frame, textvariable=self.format_var,
                                       values=["Original", "JPG", "PNG", "WEBP"], state="readonly")
         self.format_cb.pack(fill=X, pady=(0, 15))
@@ -140,12 +198,14 @@ class ImageCompressorApp:
         q_frame = ttk.Frame(settings_frame)
         q_frame.pack(fill=X)
         ttk.Label(q_frame, text="Quality:").pack(side=LEFT)
-        self.quality_label = ttk.Label(q_frame, text="80%", font=("Segoe UI", 10, "bold"))
+        self.quality_label = ttk.Label(q_frame, text=f"{self.config['quality']}%", font=("Segoe UI", 10, "bold"))
         self.quality_label.pack(side=RIGHT)
 
         self.quality = ttk.Scale(settings_frame, from_=1, to=100, orient=HORIZONTAL, command=self.slider_changed)
-        self.quality.set(80)
+        self.quality.set(self.config["quality"])
         self.quality.pack(fill=X, pady=(5, 0))
+
+        self.toggle_smart_mode()
 
         # 3. DETAILS FRAME
         details_frame = ttk.Labelframe(sidebar, text=" 📄 Image Details ", padding=15, bootstyle=INFO)
@@ -196,6 +256,24 @@ class ImageCompressorApp:
     # 2. YARDIMCI VE ZOOM FONKSİYONLARI
     ####################################################
 
+    def clear_ui(self):
+        """Arayüzdeki seçili resmi ve önizlemeleri temizler."""
+        self.input_path = None
+        self.output_path = None
+
+        fg_color = "gray" if self.root.style.theme.name == "darkly" else "dim gray"
+
+        self.before_image.configure(image='', text="📥\nDrag & Drop Image Here\n— or Click to Browse —", cursor="hand2",
+                                    foreground=fg_color)
+        self.before_image.image = None
+
+        self.after_image.configure(image='', text="✨\nCompressed Preview", cursor="arrow", foreground=fg_color)
+        self.after_image.image = None
+
+        self.info.configure(text="No image selected.", foreground=fg_color)
+        self.status.configure(text="Ready")
+        self.progress['value'] = 0
+
     def show_image_preview(self, path, title_text):
         if not path or not os.path.exists(path): return
 
@@ -230,7 +308,7 @@ class ImageCompressorApp:
                 self.quality_label.configure(text=f"{value}%")
 
     def toggle_smart_mode(self):
-        if self.smart_var.get():
+        if hasattr(self, 'smart_var') and self.smart_var.get():
             self.quality.state(['disabled'])
             self.quality_label.configure(text="Auto", bootstyle=SUCCESS)
         else:
@@ -467,3 +545,8 @@ class ImageCompressorApp:
         ttk.Button(button_frame, text="Clear History", command=on_clear, bootstyle=DANGER).pack(side=LEFT, padx=10)
         ttk.Button(button_frame, text="Close", command=stats_window.destroy, bootstyle=SECONDARY).pack(side=LEFT,
                                                                                                        padx=10)
+
+
+if __name__ == "__main__":
+    app = ImageCompressorApp()
+    app.run()
