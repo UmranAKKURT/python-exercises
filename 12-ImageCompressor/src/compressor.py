@@ -1,14 +1,14 @@
 import os
 from PIL import Image
 
-class ImageCompressor:
 
+class ImageCompressor:
     SUPPORTED_FORMATS = (".jpg", ".jpeg", ".png", ".webp")
 
     def __init__(self, keep_exif=True):
         self.keep_exif = keep_exif
 
-    def compress(self, input_path, output_path, quality=80, target_format=None):
+    def compress(self, input_path, output_path, quality=80, target_format=None, scale_percent=100):
         img = Image.open(input_path)
         exif = img.info.get("exif")
 
@@ -18,6 +18,13 @@ class ImageCompressor:
 
         if img.mode in ("RGBA", "P") and extension in (".jpg", ".jpeg"):
             img = img.convert("RGB")
+
+        # --- YENİ: BOYUTLANDIRMA (RESIZING) İŞLEMİ ---
+        if scale_percent < 100:
+            new_w = max(1, int(img.width * (scale_percent / 100.0)))
+            new_h = max(1, int(img.height * (scale_percent / 100.0)))
+            # LANCZOS filtresi, kaliteyi bozmadan küçültme yapmak için en iyi algoritmadır
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         save_kwargs = {
             "optimize": True,
@@ -31,10 +38,11 @@ class ImageCompressor:
 
         return {
             "original_size": os.path.getsize(input_path),
-            "compressed_size": os.path.getsize(output_path)
+            "compressed_size": os.path.getsize(output_path),
+            "new_resolution": img.size  # Yeni çözünürlüğü arayüze yolluyoruz
         }
 
-    def convert(self, input_path, output_path, quality=90):
+    def convert(self, input_path, output_path, quality=90, scale_percent=100):
         img = Image.open(input_path)
         extension = os.path.splitext(output_path)[1].lower()
 
@@ -42,9 +50,14 @@ class ImageCompressor:
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
 
+        if scale_percent < 100:
+            new_w = max(1, int(img.width * (scale_percent / 100.0)))
+            new_h = max(1, int(img.height * (scale_percent / 100.0)))
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
         img.save(output_path, optimize=True, quality=quality)
 
-    def batch_compress(self, input_folder, output_folder, quality=80):
+    def batch_compress(self, input_folder, output_folder, quality=80, scale_percent=100):
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
 
@@ -57,7 +70,7 @@ class ImageCompressor:
             input_path = os.path.join(input_folder, file)
             output_path = os.path.join(output_folder, file)
 
-            result = self.compress(input_path, output_path, quality)
+            result = self.compress(input_path, output_path, quality, scale_percent=scale_percent)
             result["filename"] = file
             results.append(result)
 
