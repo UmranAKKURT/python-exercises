@@ -1,772 +1,970 @@
-
-import csv
-import json
 import os
+import re
 from datetime import datetime
 
-from PIL import Image, ImageTk
-
 
 # ==========================================================
-# PROJECT PATHS
+# FILE SIZE HELPERS
 # ==========================================================
 
-BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
-)
-
-DATA_DIR = os.path.join(
-    BASE_DIR,
-    "data"
-)
-
-HISTORY_FILE = os.path.join(
-    DATA_DIR,
-    "compression_history.json"
-)
-
-CSV_HISTORY_FILE = os.path.join(
-    DATA_DIR,
-    "compression_history.csv"
-)
-
-
-# Data klasörü yoksa oluştur
-os.makedirs(
-    DATA_DIR,
-    exist_ok=True
-)
-
-
-# ==========================================================
-# FILE SIZE
-# ==========================================================
-
-def readable_size(size):
-    """
-    Convert bytes to a human-readable size.
-
-    Examples:
-        512 -> 512 B
-        2048 -> 2.00 KB
-        1048576 -> 1.00 MB
-    """
-
-    if size is None:
-        return "0 B"
-
-    size = float(size)
-
-    if size < 1024:
-        return f"{size:.0f} B"
-
-    size /= 1024
-
-    if size < 1024:
-        return f"{size:.2f} KB"
-
-    size /= 1024
-
-    if size < 1024:
-        return f"{size:.2f} MB"
-
-    size /= 1024
-
-    return f"{size:.2f} GB"
-
-
-def file_size(path):
-    """
-    Return file size in bytes.
-    """
-
-    if not os.path.exists(path):
-        return 0
-
-    return os.path.getsize(path)
-
-
-# ==========================================================
-# IMAGE INFORMATION
-# ==========================================================
-
-def image_resolution(path):
-    """
-    Return image resolution as:
-
-        (width, height)
-    """
-
-    with Image.open(path) as img:
-        return img.size
-
-
-def image_format(path):
-    """
-    Return image format.
-
-    Example:
-        JPEG
-        PNG
-        WEBP
-    """
-
-    with Image.open(path) as img:
-        return img.format or "Unknown"
-
-
-def image_mode(path):
-    """
-    Return PIL image mode.
-
-    Examples:
-        RGB
-        RGBA
-        P
-    """
-
-    with Image.open(path) as img:
-        return img.mode
-
-
-def has_transparency(path):
-    """
-    Check whether the image contains transparency.
-    """
-
-    with Image.open(path) as img:
-
-        if img.mode in ("RGBA", "LA"):
-            return True
-
-        if img.mode == "P":
-            return "transparency" in img.info
-
-        return False
-
-
-# ==========================================================
-# THUMBNAIL
-# ==========================================================
-
-def create_thumbnail(
-    path,
-    size=(250, 250)
+def format_bytes(
+    size
 ):
     """
-    Create a Tkinter-compatible thumbnail.
+    Convert bytes to a human-readable string.
+
+    Examples:
+        1024       -> 1.00 KB
+        1048576    -> 1.00 MB
     """
 
-    img = Image.open(path)
+    try:
+        size = float(size)
+    except (
+        ValueError,
+        TypeError
+    ):
+        size = 0
 
-    img.thumbnail(
-        size,
-        Image.Resampling.LANCZOS
+    size = max(
+        0,
+        size
     )
 
-    return ImageTk.PhotoImage(img)
+    units = (
+        "B",
+        "KB",
+        "MB",
+        "GB",
+        "TB"
+    )
 
+    for unit in units:
 
-# ==========================================================
-# VALIDATION
-# ==========================================================
+        if size < 1024:
 
-SUPPORTED_FORMATS = (
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp"
-)
+            return (
+                f"{size:.2f} {unit}"
+            )
 
-
-def validate_image(path):
-    """
-    Check whether the file has a supported extension.
-    """
-
-    if not path:
-        return False
-
-    if not os.path.isfile(path):
-        return False
-
-    extension = os.path.splitext(
-        path
-    )[1].lower()
-
-    return extension in SUPPORTED_FORMATS
-
-
-# ==========================================================
-# COMPRESSION CALCULATIONS
-# ==========================================================
-
-def compression_ratio(
-    original_size,
-    compressed_size
-):
-    """
-    Calculate saved space percentage.
-    """
-
-    if original_size <= 0:
-        return 0
+        size /= 1024
 
     return (
-        (original_size - compressed_size)
-        / original_size
-    ) * 100
+        f"{size:.2f} PB"
+    )
 
 
-def saved_bytes(
-    original_size,
-    compressed_size
+def bytes_to_kb(
+    size
 ):
     """
-    Return the amount of saved bytes.
+    Convert bytes to kilobytes.
     """
 
-    return max(
-        0,
-        original_size - compressed_size
+    try:
+        size = float(size)
+    except (
+        ValueError,
+        TypeError
+    ):
+        return 0.0
+
+    return round(
+        size / 1024,
+        2
     )
 
 
-def estimate_size(
-    original_size,
-    quality
+def bytes_to_mb(
+    size
 ):
     """
-    Roughly estimate compressed size.
-
-    NOTE:
-    This is only an estimation.
-    Actual image compression depends on
-    image content and output format.
+    Convert bytes to megabytes.
     """
 
-    quality = max(
-        1,
-        min(
-            100,
-            int(quality)
-        )
+    try:
+        size = float(size)
+    except (
+        ValueError,
+        TypeError
+    ):
+        return 0.0
+
+    return round(
+        size / (
+            1024 * 1024
+        ),
+        2
     )
 
-    # A simple nonlinear approximation.
-    factor = (
-        0.15 +
-        0.85 * (quality / 100)
-    )
+
+def mb_to_bytes(
+    size
+):
+    """
+    Convert megabytes to bytes.
+    """
+
+    try:
+        size = float(size)
+    except (
+        ValueError,
+        TypeError
+    ):
+        return 0
 
     return int(
-        original_size * factor
+        size * 1024 * 1024
     )
 
 
-def estimate_saving(
+# ==========================================================
+# COMPRESSION HELPERS
+# ==========================================================
+
+def calculate_saving_percentage(
     original_size,
-    estimated_size
+    new_size
 ):
     """
-    Estimate saved percentage.
+    Calculate storage saving percentage.
+
+    Example:
+        Original = 10 MB
+        New      = 7 MB
+
+        Result = 30%
     """
 
-    if original_size <= 0:
-        return 0
+    try:
 
-    return (
-        (original_size - estimated_size)
+        original_size = float(
+            original_size
+        )
+
+        new_size = float(
+            new_size
+        )
+
+    except (
+        ValueError,
+        TypeError
+    ):
+
+        return 0.0
+
+    if original_size <= 0:
+
+        return 0.0
+
+    saved = max(
+        0,
+        original_size - new_size
+    )
+
+    percentage = (
+        saved
         / original_size
     ) * 100
 
+    return round(
+        percentage,
+        2
+    )
 
-# ==========================================================
-# HISTORY
-# ==========================================================
 
-def create_history_item(
-    filename,
+def calculate_compression_ratio(
     original_size,
-    compressed_size,
-    ratio,
-    quality=None,
-    output_format=None,
-    original_resolution=None,
-    new_resolution=None,
-    processing_time=None
+    new_size
 ):
     """
-    Create a history record.
+    Calculate compression ratio.
 
-    New fields are optional so older parts of the
-    application can still use this function.
+    Example:
+        Original = 1000 KB
+        New      = 250 KB
+
+        Result = 4.0
     """
-
-    original_size = int(
-        original_size
-    )
-
-    compressed_size = int(
-        compressed_size
-    )
-
-    record = {
-        "filename": filename,
-        "date": datetime.now().strftime(
-            "%d.%m.%Y %H:%M:%S"
-        ),
-        "original": original_size,
-        "compressed": compressed_size,
-        "saved": max(
-            0,
-            original_size - compressed_size
-        ),
-        "ratio": round(
-            ratio,
-            2
-        )
-    }
-
-    if quality is not None:
-        record["quality"] = int(
-            quality
-        )
-
-    if output_format:
-        record["format"] = str(
-            output_format
-        ).upper()
-
-    if original_resolution:
-        record["original_resolution"] = (
-            f"{original_resolution[0]}"
-            f"x"
-            f"{original_resolution[1]}"
-        )
-
-    if new_resolution:
-        record["new_resolution"] = (
-            f"{new_resolution[0]}"
-            f"x"
-            f"{new_resolution[1]}"
-        )
-
-    if processing_time is not None:
-        record["processing_time"] = round(
-            float(processing_time),
-            3
-        )
-
-    return record
-
-
-def load_history():
-    """
-    Load compression history from JSON.
-    """
-
-    if not os.path.exists(
-        HISTORY_FILE
-    ):
-        return []
 
     try:
 
-        with open(
-            HISTORY_FILE,
-            "r",
-            encoding="utf-8"
-        ) as file:
+        original_size = float(
+            original_size
+        )
 
-            data = json.load(file)
-
-            if isinstance(
-                data,
-                list
-            ):
-                return data
+        new_size = float(
+            new_size
+        )
 
     except (
-        json.JSONDecodeError,
-        OSError
+        ValueError,
+        TypeError
     ):
-        pass
 
-    return []
+        return 0.0
 
+    if new_size <= 0:
 
-def save_history(data):
-    """
-    Append a new history record.
-    """
+        return 0.0
 
-    history = load_history()
-
-    history.append(
-        data
+    return round(
+        original_size / new_size,
+        2
     )
 
-    try:
-
-        with open(
-            HISTORY_FILE,
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                history,
-                file,
-                indent=4,
-                ensure_ascii=False
-            )
-
-    except OSError as error:
-
-        raise OSError(
-            f"Could not save history: {error}"
-        )
-
-
-def clear_history():
-    """
-    Delete all history records.
-    """
-
-    try:
-
-        with open(
-            HISTORY_FILE,
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                [],
-                file,
-                indent=4
-            )
-
-    except OSError as error:
-
-        raise OSError(
-            f"Could not clear history: {error}"
-        )
-
 
 # ==========================================================
-# HISTORY STATISTICS
+# FILE NAME HELPERS
 # ==========================================================
 
-def history_statistics():
-    """
-    Calculate general compression statistics.
-    """
-
-    history = load_history()
-
-    if not history:
-
-        return {
-            "count": 0,
-            "original_bytes": 0,
-            "compressed_bytes": 0,
-            "saved_bytes": 0,
-            "average_ratio": 0,
-            "average_processing_time": 0
-        }
-
-    total_original = 0
-    total_compressed = 0
-    total_saved = 0
-    total_ratio = 0
-
-    processing_times = []
-
-    for item in history:
-
-        original = int(
-            item.get(
-                "original",
-                0
-            )
-        )
-
-        compressed = int(
-            item.get(
-                "compressed",
-                0
-            )
-        )
-
-        saved = int(
-            item.get(
-                "saved",
-                max(
-                    0,
-                    original - compressed
-                )
-            )
-        )
-
-        ratio = float(
-            item.get(
-                "ratio",
-                0
-            )
-        )
-
-        total_original += original
-        total_compressed += compressed
-        total_saved += saved
-        total_ratio += ratio
-
-        if "processing_time" in item:
-
-            try:
-                processing_times.append(
-                    float(
-                        item["processing_time"]
-                    )
-                )
-            except (
-                ValueError,
-                TypeError
-            ):
-                pass
-
-    average_time = (
-        sum(processing_times)
-        / len(processing_times)
-        if processing_times
-        else 0
-    )
-
-    return {
-        "count": len(history),
-        "original_bytes": total_original,
-        "compressed_bytes": total_compressed,
-        "saved_bytes": total_saved,
-        "average_ratio": (
-            total_ratio / len(history)
-        ),
-        "average_processing_time": average_time
-    }
-
-
-# ==========================================================
-# FORMAT STATISTICS
-# ==========================================================
-
-def format_statistics():
-    """
-    Count how many times each output format was used.
-    """
-
-    history = load_history()
-
-    statistics = {}
-
-    for item in history:
-
-        fmt = item.get(
-            "format",
-            "UNKNOWN"
-        )
-
-        fmt = str(
-            fmt
-        ).upper()
-
-        statistics[fmt] = (
-            statistics.get(
-                fmt,
-                0
-            ) + 1
-        )
-
-    return statistics
-
-
-# ==========================================================
-# CSV EXPORT
-# ==========================================================
-
-def export_history_csv(
-    output_path=None
+def get_filename(
+    file_path
 ):
     """
-    Export compression history to CSV.
-
-    Returns the generated CSV path.
+    Return filename including extension.
     """
 
-    history = load_history()
+    if not file_path:
 
-    if output_path is None:
-        output_path = CSV_HISTORY_FILE
+        return ""
 
-    if not history:
+    return os.path.basename(
+        file_path
+    )
+
+
+def get_filename_without_extension(
+    file_path
+):
+    """
+    Return filename without extension.
+    """
+
+    if not file_path:
+
+        return ""
+
+    filename = os.path.basename(
+        file_path
+    )
+
+    return os.path.splitext(
+        filename
+    )[0]
+
+
+def get_extension(
+    file_path
+):
+    """
+    Return lowercase file extension.
+    """
+
+    if not file_path:
+
+        return ""
+
+    return (
+        os.path.splitext(
+            file_path
+        )[1]
+        .lower()
+    )
+
+
+def change_extension(
+    file_path,
+    extension
+):
+    """
+    Change the extension of a file path.
+
+    Does not modify the actual file.
+    """
+
+    if not file_path:
+
+        return ""
+
+    extension = str(
+        extension
+    ).strip().lower()
+
+    if not extension.startswith(
+        "."
+    ):
+
+        extension = (
+            "."
+            + extension
+        )
+
+    directory = os.path.dirname(
+        file_path
+    )
+
+    filename = os.path.basename(
+        file_path
+    )
+
+    name = os.path.splitext(
+        filename
+    )[0]
+
+    return os.path.join(
+        directory,
+        f"{name}{extension}"
+    )
+
+
+# ==========================================================
+# PATH HELPERS
+# ==========================================================
+
+def ensure_directory(
+    directory
+):
+    """
+    Create a directory if it does not exist.
+    """
+
+    if not directory:
+
         raise ValueError(
-            "There is no compression history to export."
+            "Directory cannot be empty."
         )
 
-    # Collect all possible fields so older
-    # and newer history records can coexist.
-    fields = []
+    os.makedirs(
+        directory,
+        exist_ok=True
+    )
 
-    for item in history:
-
-        for key in item.keys():
-
-            if key not in fields:
-                fields.append(key)
-
-    try:
-
-        with open(
-            output_path,
-            "w",
-            newline="",
-            encoding="utf-8-sig"
-        ) as file:
-
-            writer = csv.DictWriter(
-                file,
-                fieldnames=fields
-            )
-
-            writer.writeheader()
-
-            for item in history:
-                writer.writerow(item)
-
-    except OSError as error:
-
-        raise OSError(
-            f"Could not export CSV: {error}"
-        )
-
-    return output_path
+    return os.path.abspath(
+        directory
+    )
 
 
-# ==========================================================
-# UNIQUE FILE NAME
-# ==========================================================
-
-def unique_filename(path):
+def get_unique_path(
+    file_path
+):
     """
-    Prevent overwriting an existing file.
+    Generate a unique file path.
 
     Example:
 
         image.jpg
-        image(1).jpg
-        image(2).jpg
+
+    becomes:
+
+        image_1.jpg
+        image_2.jpg
+        ...
     """
 
-    if not os.path.exists(path):
-        return path
-
-    directory = os.path.dirname(
-        path
+    file_path = os.path.abspath(
+        file_path
     )
 
-    name = os.path.splitext(
-        os.path.basename(path)
-    )[0]
+    if not os.path.exists(
+        file_path
+    ):
 
-    extension = os.path.splitext(
-        path
-    )[1]
+        return file_path
+
+    directory = os.path.dirname(
+        file_path
+    )
+
+    filename = os.path.basename(
+        file_path
+    )
+
+    name, extension = (
+        os.path.splitext(
+            filename
+        )
+    )
 
     counter = 1
 
     while True:
 
-        new_path = os.path.join(
+        candidate = os.path.join(
             directory,
-            f"{name}({counter}){extension}"
+            f"{name}_{counter}"
+            f"{extension}"
         )
 
         if not os.path.exists(
-            new_path
+            candidate
         ):
-            return new_path
+
+            return candidate
 
         counter += 1
 
 
 # ==========================================================
-# PERFORMANCE HELPERS
+# VALIDATION HELPERS
 # ==========================================================
 
-def calculate_speed(
-    processed_bytes,
-    processing_time
+def is_valid_file(
+    file_path
 ):
     """
-    Calculate processing speed in MB/s.
+    Check whether the given path points to a file.
     """
 
-    if processing_time <= 0:
-        return 0
+    if not file_path:
 
-    megabytes = (
-        processed_bytes
-        / (1024 * 1024)
+        return False
+
+    return os.path.isfile(
+        file_path
     )
 
-    return megabytes / processing_time
 
-
-# ==========================================================
-# TARGET SIZE HELPERS
-# ==========================================================
-
-def target_size_status(
-    current_size,
-    target_size_kb
+def is_valid_directory(
+    directory
 ):
     """
-    Compare current file size with target size.
-
-    Returns:
-        {
-            "reached": bool,
-            "current_kb": float,
-            "target_kb": float,
-            "difference_kb": float
-        }
+    Check whether the given path points to a directory.
     """
 
-    current_kb = (
-        current_size / 1024
+    if not directory:
+
+        return False
+
+    return os.path.isdir(
+        directory
     )
 
-    target_kb = float(
-        target_size_kb
+
+def is_supported_image(
+    file_path
+):
+    """
+    Check whether a file has a supported image extension.
+    """
+
+    supported_extensions = {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+        ".bmp",
+        ".tiff",
+        ".tif"
+    }
+
+    extension = get_extension(
+        file_path
     )
 
-    difference = (
-        current_kb - target_kb
+    return (
+        extension
+        in supported_extensions
     )
 
-    return {
-        "reached": current_kb <= target_kb,
-        "current_kb": round(
-            current_kb,
-            2
-        ),
-        "target_kb": round(
-            target_kb,
-            2
-        ),
-        "difference_kb": round(
-            difference,
-            2
+
+# ==========================================================
+# QUALITY HELPERS
+# ==========================================================
+
+def validate_quality(
+    quality,
+    default=80
+):
+    """
+    Validate image quality.
+
+    The result is always between 1 and 100.
+    """
+
+    try:
+
+        quality = int(
+            quality
+        )
+
+    except (
+        ValueError,
+        TypeError
+    ):
+
+        quality = default
+
+    return max(
+        1,
+        min(
+            100,
+            quality
+        )
+    )
+
+
+def quality_to_label(
+    quality
+):
+    """
+    Convert numerical quality into a readable label.
+    """
+
+    quality = validate_quality(
+        quality
+    )
+
+    if quality >= 90:
+
+        return "Very High"
+
+    if quality >= 75:
+
+        return "High"
+
+    if quality >= 50:
+
+        return "Medium"
+
+    if quality >= 25:
+
+        return "Low"
+
+    return "Very Low"
+
+
+# ==========================================================
+# FORMAT HELPERS
+# ==========================================================
+
+def normalize_format(
+    image_format
+):
+    """
+    Normalize image format.
+
+    Examples:
+        jpg   -> JPG
+        .png  -> PNG
+        jpeg  -> JPG
+        webp  -> WEBP
+    """
+
+    if not image_format:
+
+        return ""
+
+    image_format = str(
+        image_format
+    ).strip().lower()
+
+    image_format = (
+        image_format
+        .replace(
+            ".",
+            ""
+        )
+    )
+
+    if image_format == "jpeg":
+
+        image_format = "jpg"
+
+    return image_format.upper()
+
+
+def format_to_extension(
+    image_format
+):
+    """
+    Convert image format to extension.
+
+    Example:
+        WEBP -> .webp
+    """
+
+    normalized = normalize_format(
+        image_format
+    )
+
+    if not normalized:
+
+        return ""
+
+    return (
+        "."
+        + normalized.lower()
+    )
+
+
+def is_supported_format(
+    image_format
+):
+    """
+    Check whether an image format is supported.
+    """
+
+    supported_formats = {
+        "JPG",
+        "PNG",
+        "WEBP"
+    }
+
+    return (
+        normalize_format(
+            image_format
+        )
+        in supported_formats
+    )
+
+
+# ==========================================================
+# TEXT HELPERS
+# ==========================================================
+
+def sanitize_filename(
+    filename
+):
+    """
+    Remove characters that are unsafe for filenames.
+
+    This is especially useful when generating output
+    filenames automatically.
+    """
+
+    if not filename:
+
+        return "image"
+
+    filename = str(
+        filename
+    )
+
+    # Remove extension temporarily.
+    name, extension = (
+        os.path.splitext(
+            filename
+        )
+    )
+
+    # Replace invalid Windows filename characters.
+    name = re.sub(
+        r'[<>:"/\\|?*]',
+        "_",
+        name
+    )
+
+    # Remove control characters.
+    name = re.sub(
+        r"[\x00-\x1f]",
+        "",
+        name
+    )
+
+    # Replace multiple spaces.
+    name = re.sub(
+        r"\s+",
+        " ",
+        name
+    )
+
+    name = name.strip()
+
+    if not name:
+
+        name = "image"
+
+    return (
+        name
+        + extension
+    )
+
+
+def truncate_text(
+    text,
+    max_length=50
+):
+    """
+    Shorten text if it exceeds max_length.
+    """
+
+    if text is None:
+
+        return ""
+
+    text = str(
+        text
+    )
+
+    if len(text) <= max_length:
+
+        return text
+
+    if max_length <= 3:
+
+        return text[
+            :max_length
+        ]
+
+    return (
+        text[
+            :(max_length - 3)
+        ]
+        + "..."
+    )
+
+
+# ==========================================================
+# DATE / TIME HELPERS
+# ==========================================================
+
+def get_current_timestamp():
+    """
+    Return current date and time as a string.
+    """
+
+    return datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+
+def get_current_date():
+    """
+    Return current date.
+    """
+
+    return datetime.now().strftime(
+        "%Y-%m-%d"
+    )
+
+
+def get_current_time():
+    """
+    Return current time.
+    """
+
+    return datetime.now().strftime(
+        "%H:%M:%S"
+    )
+
+
+# ==========================================================
+# NUMBER HELPERS
+# ==========================================================
+
+def safe_int(
+    value,
+    default=0
+):
+    """
+    Safely convert a value to integer.
+    """
+
+    try:
+
+        return int(
+            float(
+                value
+            )
+        )
+
+    except (
+        ValueError,
+        TypeError
+    ):
+
+        return default
+
+
+def safe_float(
+    value,
+    default=0.0
+):
+    """
+    Safely convert a value to float.
+    """
+
+    try:
+
+        return float(
+            value
+        )
+
+    except (
+        ValueError,
+        TypeError
+    ):
+
+        return default
+
+
+def clamp(
+    value,
+    minimum,
+    maximum
+):
+    """
+    Keep a number between minimum and maximum.
+    """
+
+    value = safe_float(
+        value
+    )
+
+    return max(
+        minimum,
+        min(
+            maximum,
+            value
+        )
+    )
+
+
+# ==========================================================
+# BOOLEAN HELPERS
+# ==========================================================
+
+def to_bool(
+    value,
+    default=False
+):
+    """
+    Convert common values to boolean.
+    """
+
+    if isinstance(
+        value,
+        bool
+    ):
+
+        return value
+
+    if isinstance(
+        value,
+        str
+    ):
+
+        normalized = (
+            value.strip().lower()
+        )
+
+        if normalized in (
+            "true",
+            "1",
+            "yes",
+            "on",
+            "enabled"
+        ):
+
+            return True
+
+        if normalized in (
+            "false",
+            "0",
+            "no",
+            "off",
+            "disabled"
+        ):
+
+            return False
+
+    if isinstance(
+        value,
+        (int, float)
+    ):
+
+        return value != 0
+
+    return default
+
+
+# ==========================================================
+# LIST HELPERS
+# ==========================================================
+
+def chunk_list(
+    items,
+    chunk_size
+):
+    """
+    Split a list into smaller chunks.
+
+    Example:
+
+        [1,2,3,4,5], 2
+
+        ->
+        [[1,2], [3,4], [5]]
+    """
+
+    if not isinstance(
+        items,
+        list
+    ):
+
+        return []
+
+    chunk_size = safe_int(
+        chunk_size
+    )
+
+    if chunk_size <= 0:
+
+        return []
+
+    return [
+        items[
+            index:index + chunk_size
+        ]
+        for index in range(
+            0,
+            len(items),
+            chunk_size
+        )
+    ]
+
+
+# ==========================================================
+# RESULT HELPERS
+# ==========================================================
+
+def create_success_result(
+    **kwargs
+):
+    """
+    Create a standardized successful operation result.
+    """
+
+    result = {
+        "success": True,
+        "error": None
+    }
+
+    result.update(
+        kwargs
+    )
+
+    return result
+
+
+def create_error_result(
+    error,
+    **kwargs
+):
+    """
+    Create a standardized failed operation result.
+    """
+
+    result = {
+        "success": False,
+        "error": str(
+            error
         )
     }
+
+    result.update(
+        kwargs
+    )
+
+    return result
