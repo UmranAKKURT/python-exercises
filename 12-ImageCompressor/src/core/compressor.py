@@ -1,587 +1,903 @@
 import os
+import time
+
 from PIL import Image
 
 
 class ImageCompressor:
-    SUPPORTED_FORMATS = (".jpg", ".jpeg", ".png", ".webp")
+    """
+    Core image compression engine.
 
-    def __init__(self, keep_exif=True):
-        self.keep_exif = keep_exif
+    Supports:
+        - JPEG compression
+        - PNG optimization
+        - WebP compression
+        - Quality control
+        - Output format conversion
+        - Compression statistics
+    """
+
+    SUPPORTED_FORMATS = {
+        "JPG",
+        "JPEG",
+        "PNG",
+        "WEBP",
+    }
 
     # ==========================================================
-    # BASIC COMPRESSION
+    # INITIALIZATION
+    # ==========================================================
+
+    def __init__(
+        self,
+        quality=80
+    ):
+        """
+        Initialize the compression engine.
+
+        Args:
+            quality: Compression quality from 1 to 100.
+        """
+
+        self.quality = self._validate_quality(
+            quality
+        )
+
+    # ==========================================================
+    # QUALITY
+    # ==========================================================
+
+    @staticmethod
+    def _validate_quality(
+        quality
+    ):
+        """
+        Validate and normalize quality value.
+        """
+
+        try:
+
+            quality = int(
+                quality
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            quality = 80
+
+        return max(
+            1,
+            min(
+                100,
+                quality
+            )
+        )
+
+    def set_quality(
+        self,
+        quality
+    ):
+        """
+        Update compression quality.
+        """
+
+        self.quality = self._validate_quality(
+            quality
+        )
+
+    # ==========================================================
+    # FILE VALIDATION
+    # ==========================================================
+
+    @staticmethod
+    def _validate_input_file(
+        input_path
+    ):
+        """
+        Validate input image path.
+        """
+
+        if not input_path:
+
+            raise ValueError(
+                "Input file path cannot be empty."
+            )
+
+        if not os.path.isfile(
+            input_path
+        ):
+
+            raise FileNotFoundError(
+                f"Image file not found: {input_path}"
+            )
+
+        return True
+
+    # ==========================================================
+    # DIRECTORY
+    # ==========================================================
+
+    @staticmethod
+    def _ensure_output_directory(
+        output_path
+    ):
+        """
+        Create output directory if necessary.
+        """
+
+        directory = os.path.dirname(
+            os.path.abspath(
+                output_path
+            )
+        )
+
+        if directory:
+
+            os.makedirs(
+                directory,
+                exist_ok=True
+            )
+
+    # ==========================================================
+    # FORMAT
+    # ==========================================================
+
+    @staticmethod
+    def _normalize_format(
+        image_format
+    ):
+        """
+        Normalize image format.
+        """
+
+        if not image_format:
+
+            return None
+
+        image_format = str(
+            image_format
+        ).strip().upper()
+
+        image_format = image_format.replace(
+            ".",
+            ""
+        )
+
+        if image_format == "JPEG":
+
+            return "JPG"
+
+        return image_format
+
+    @staticmethod
+    def _get_output_format(
+        input_path,
+        output_path,
+        output_format=None
+    ):
+        """
+        Determine output image format.
+        """
+
+        if output_format:
+
+            normalized = (
+                ImageCompressor
+                ._normalize_format(
+                    output_format
+                )
+            )
+
+            if normalized in (
+                "JPG",
+                "PNG",
+                "WEBP"
+            ):
+
+                return normalized
+
+        extension = (
+            os.path.splitext(
+                output_path
+            )[1]
+            .lower()
+        )
+
+        extension_map = {
+            ".jpg": "JPG",
+            ".jpeg": "JPG",
+            ".png": "PNG",
+            ".webp": "WEBP",
+        }
+
+        if extension in extension_map:
+
+            return extension_map[
+                extension
+            ]
+
+        input_extension = (
+            os.path.splitext(
+                input_path
+            )[1]
+            .lower()
+        )
+
+        if input_extension in extension_map:
+
+            return extension_map[
+                input_extension
+            ]
+
+        return "JPG"
+
+    # ==========================================================
+    # IMAGE MODE
+    # ==========================================================
+
+    @staticmethod
+    def _prepare_image_for_format(
+        image,
+        output_format
+    ):
+        """
+        Prepare image mode for the target format.
+
+        JPEG does not support RGBA or palette transparency,
+        therefore such images are converted to RGB.
+        """
+
+        if output_format == "JPG":
+
+            if image.mode in (
+                "RGBA",
+                "LA",
+                "P"
+            ):
+
+                background = Image.new(
+                    "RGB",
+                    image.size,
+                    "white"
+                )
+
+                if image.mode == "P":
+
+                    image = image.convert(
+                        "RGBA"
+                    )
+
+                if image.mode in (
+                    "RGBA",
+                    "LA"
+                ):
+
+                    background.paste(
+                        image,
+                        mask=image.getchannel(
+                            "A"
+                        )
+                    )
+
+                    return background
+
+                return image.convert(
+                    "RGB"
+                )
+
+            if image.mode != "RGB":
+
+                return image.convert(
+                    "RGB"
+                )
+
+        return image
+
+    # ==========================================================
+    # SAVE OPTIONS
+    # ==========================================================
+
+    def _get_save_options(
+        self,
+        output_format
+    ):
+        """
+        Return format-specific Pillow save options.
+        """
+
+        if output_format == "JPG":
+
+            return {
+                "format": "JPEG",
+                "quality": self.quality,
+                "optimize": True,
+                "progressive": True,
+            }
+
+        if output_format == "PNG":
+
+            # PNG does not use the JPEG-style quality parameter.
+            # optimize=True reduces unnecessary metadata and
+            # improves compression efficiency.
+            return {
+                "format": "PNG",
+                "optimize": True,
+            }
+
+        if output_format == "WEBP":
+
+            return {
+                "format": "WEBP",
+                "quality": self.quality,
+                "method": 6,
+            }
+
+        raise ValueError(
+            f"Unsupported output format: {output_format}"
+        )
+
+    # ==========================================================
+    # SINGLE IMAGE COMPRESSION
     # ==========================================================
 
     def compress(
         self,
         input_path,
         output_path,
-        quality=80,
-        target_format=None,
-        scale_percent=100
+        output_format=None
     ):
         """
-        Compress an image.
+        Compress a single image.
 
-        Parameters:
-            input_path: Source image path
-            output_path: Destination image path
-            quality: Compression quality (1-100)
-            target_format: Optional output format (.jpg, .png, .webp)
-            scale_percent: Resize percentage
+        Args:
+            input_path:
+                Path to original image.
+
+            output_path:
+                Path where compressed image will be saved.
+
+            output_format:
+                Optional target format.
+
+        Returns:
+            dict containing compression statistics.
         """
 
-        self._validate_input(input_path)
+        start_time = time.perf_counter()
 
-        quality = self._validate_quality(quality)
-        scale_percent = self._validate_scale(scale_percent)
-
-        with Image.open(input_path) as original_img:
-
-            img = original_img.copy()
-
-            exif = original_img.info.get("exif")
-
-            extension = os.path.splitext(output_path)[1].lower()
-
-            if target_format:
-                extension = target_format.lower()
-
-            extension = self._normalize_extension(extension)
-
-            # --------------------------------------------------
-            # RESIZE
-            # --------------------------------------------------
-
-            if scale_percent < 100:
-                img = self._resize(img, scale_percent)
-
-            # --------------------------------------------------
-            # COLOR MODE
-            # --------------------------------------------------
-
-            img = self._prepare_image_for_format(img, extension)
-
-            # --------------------------------------------------
-            # SAVE OPTIONS
-            # --------------------------------------------------
-
-            save_kwargs = self._build_save_options(
-                extension=extension,
-                quality=quality,
-                exif=exif
-            )
-
-            # --------------------------------------------------
-            # SAVE
-            # --------------------------------------------------
-
-            img.save(
-                output_path,
-                **save_kwargs
-            )
-
-            original_size = os.path.getsize(input_path)
-            compressed_size = os.path.getsize(output_path)
-
-            return {
-                "original_size": original_size,
-                "compressed_size": compressed_size,
-                "saved_bytes": max(0, original_size - compressed_size),
-                "compression_ratio": self.compression_ratio(
-                    original_size,
-                    compressed_size
-                ),
-                "new_resolution": img.size,
-                "format": extension.replace(".", "").upper()
-            }
-
-    # ==========================================================
-    # TARGET SIZE COMPRESSION
-    # ==========================================================
-
-    def smart_compress(
-        self,
-        input_path,
-        output_path,
-        target_size_kb=500,
-        min_quality=5,
-        max_quality=100
-    ):
-        """
-        Compress an image to the largest possible quality
-        while staying below the requested target size.
-
-        Example:
-
-            target_size_kb = 500
-
-        means:
-
-            output <= 500 KB
-        """
-
-        self._validate_input(input_path)
-
-        if target_size_kb <= 0:
-            raise ValueError("Target size must be greater than 0 KB.")
-
-        min_quality = self._validate_quality(min_quality)
-        max_quality = self._validate_quality(max_quality)
-
-        if min_quality > max_quality:
-            raise ValueError(
-                "min_quality cannot be greater than max_quality."
-            )
-
-        target_size_bytes = target_size_kb * 1024
-
-        low = min_quality
-        high = max_quality
-
-        best_quality = min_quality
-        best_size = None
-
-        while low <= high:
-
-            quality = (low + high) // 2
-
-            self.compress(
-                input_path,
-                output_path,
-                quality=quality
-            )
-
-            current_size = os.path.getsize(output_path)
-
-            if current_size <= target_size_bytes:
-
-                best_quality = quality
-                best_size = current_size
-
-                # Try a higher quality.
-                low = quality + 1
-
-            else:
-
-                # File is too large.
-                high = quality - 1
-
-        # ------------------------------------------------------
-        # Final compression
-        # ------------------------------------------------------
-
-        self.compress(
-            input_path,
-            output_path,
-            quality=best_quality
+        self._validate_input_file(
+            input_path
         )
 
-        final_size = os.path.getsize(output_path)
+        if not output_path:
 
-        return {
-            "quality": best_quality,
-            "target_size": target_size_bytes,
-            "compressed_size": final_size,
-            "target_reached": final_size <= target_size_bytes,
-            "difference": final_size - target_size_bytes
-        }
-
-    # ==========================================================
-    # RESIZE
-    # ==========================================================
-
-    def resize(
-        self,
-        input_path,
-        output_path,
-        scale_percent=100,
-        quality=90,
-        target_format=None
-    ):
-        """
-        Resize an image while keeping its aspect ratio.
-        """
-
-        self._validate_input(input_path)
-
-        scale_percent = self._validate_scale(scale_percent)
-        quality = self._validate_quality(quality)
-
-        with Image.open(input_path) as original_img:
-
-            img = original_img.copy()
-
-            if scale_percent != 100:
-                img = self._resize(img, scale_percent)
-
-            extension = os.path.splitext(output_path)[1].lower()
-
-            if target_format:
-                extension = target_format.lower()
-
-            extension = self._normalize_extension(extension)
-
-            img = self._prepare_image_for_format(
-                img,
-                extension
+            raise ValueError(
+                "Output path cannot be empty."
             )
 
-            save_kwargs = self._build_save_options(
-                extension=extension,
-                quality=quality,
-                exif=original_img.info.get("exif")
-            )
-
-            img.save(
+        output_format = (
+            self._get_output_format(
+                input_path,
                 output_path,
-                **save_kwargs
+                output_format
+            )
+        )
+
+        original_size = os.path.getsize(
+            input_path
+        )
+
+        self._ensure_output_directory(
+            output_path
+        )
+
+        try:
+
+            with Image.open(
+                input_path
+            ) as image:
+
+                original_width, original_height = (
+                    image.size
+                )
+
+                image = (
+                    self._prepare_image_for_format(
+                        image,
+                        output_format
+                    )
+                )
+
+                save_options = (
+                    self._get_save_options(
+                        output_format
+                    )
+                )
+
+                image.save(
+                    output_path,
+                    **save_options
+                )
+
+            new_size = os.path.getsize(
+                output_path
+            )
+
+            processing_time = (
+                time.perf_counter()
+                - start_time
+            )
+
+            saved_bytes = max(
+                0,
+                original_size - new_size
+            )
+
+            saving_percentage = (
+                (
+                    saved_bytes
+                    / original_size
+                ) * 100
+                if original_size > 0
+                else 0
+            )
+
+            compression_ratio = (
+                original_size / new_size
+                if new_size > 0
+                else 0
             )
 
             return {
-                "original_resolution": original_img.size,
-                "new_resolution": img.size,
-                "original_size": os.path.getsize(input_path),
-                "new_size": os.path.getsize(output_path)
+                "success": True,
+                "input_path": input_path,
+                "output_path": output_path,
+                "filename": os.path.basename(
+                    input_path
+                ),
+                "original_size": original_size,
+                "new_size": new_size,
+                "saved_bytes": saved_bytes,
+                "saving_percentage": round(
+                    saving_percentage,
+                    2
+                ),
+                "compression_ratio": round(
+                    compression_ratio,
+                    2
+                ),
+                "processing_time": round(
+                    processing_time,
+                    4
+                ),
+                "quality": self.quality,
+                "output_format": output_format,
+                "original_width": original_width,
+                "original_height": original_height,
             }
 
-    # ==========================================================
-    # FORMAT CONVERSION
-    # ==========================================================
+        except Exception as error:
 
-    def convert(
-        self,
-        input_path,
-        output_path,
-        quality=90,
-        scale_percent=100
-    ):
-        """
-        Convert an image to another format.
+            # Remove partially created output file.
+            if os.path.exists(
+                output_path
+            ):
 
-        Supported:
-            JPG
-            JPEG
-            PNG
-            WEBP
-        """
+                try:
 
-        self._validate_input(input_path)
+                    os.remove(
+                        output_path
+                    )
 
-        quality = self._validate_quality(quality)
-        scale_percent = self._validate_scale(scale_percent)
+                except OSError:
 
-        extension = os.path.splitext(output_path)[1].lower()
-        extension = self._normalize_extension(extension)
+                    pass
 
-        with Image.open(input_path) as original_img:
-
-            img = original_img.copy()
-
-            if scale_percent != 100:
-                img = self._resize(img, scale_percent)
-
-            img = self._prepare_image_for_format(
-                img,
-                extension
-            )
-
-            save_kwargs = self._build_save_options(
-                extension=extension,
-                quality=quality,
-                exif=original_img.info.get("exif")
-            )
-
-            img.save(
-                output_path,
-                **save_kwargs
+            processing_time = (
+                time.perf_counter()
+                - start_time
             )
 
             return {
-                "original_size": os.path.getsize(input_path),
-                "new_size": os.path.getsize(output_path),
-                "new_resolution": img.size,
-                "format": extension.replace(".", "").upper()
+                "success": False,
+                "input_path": input_path,
+                "output_path": output_path,
+                "filename": os.path.basename(
+                    input_path
+                ),
+                "error": str(
+                    error
+                ),
+                "processing_time": round(
+                    processing_time,
+                    4
+                ),
             }
 
     # ==========================================================
     # BATCH COMPRESSION
     # ==========================================================
 
-    def batch_compress(
+    def compress_batch(
         self,
-        input_folder,
-        output_folder,
-        quality=80,
-        scale_percent=100,
-        target_format=None
+        input_files,
+        output_directory,
+        output_format=None
     ):
         """
-        Compress every supported image inside a folder.
+        Compress multiple images.
+
+        Args:
+            input_files:
+                Iterable of image paths.
+
+            output_directory:
+                Destination directory.
+
+            output_format:
+                Optional output format.
+
+        Returns:
+            List of compression result dictionaries.
         """
 
-        if not os.path.isdir(input_folder):
+        if not input_files:
+
+            return []
+
+        if not output_directory:
+
             raise ValueError(
-                f"Input folder does not exist: {input_folder}"
+                "Output directory cannot be empty."
             )
 
         os.makedirs(
-            output_folder,
+            output_directory,
             exist_ok=True
         )
 
         results = []
 
-        for filename in os.listdir(input_folder):
+        for input_path in input_files:
 
-            extension = os.path.splitext(
-                filename
-            )[1].lower()
+            if not input_path:
 
-            if extension not in self.SUPPORTED_FORMATS:
                 continue
 
-            input_path = os.path.join(
-                input_folder,
-                filename
+            filename = os.path.basename(
+                input_path
             )
 
-            output_extension = (
-                target_format.lower()
-                if target_format
-                else extension
+            original_name = (
+                os.path.splitext(
+                    filename
+                )[0]
             )
 
-            base_name = os.path.splitext(filename)[0]
+            selected_format = (
+                output_format
+                if output_format
+                else self._get_output_format(
+                    input_path,
+                    input_path
+                )
+            )
+
+            normalized_format = (
+                self._normalize_format(
+                    selected_format
+                )
+            )
+
+            extension_map = {
+                "JPG": ".jpg",
+                "PNG": ".png",
+                "WEBP": ".webp",
+            }
+
+            extension = extension_map.get(
+                normalized_format,
+                os.path.splitext(
+                    filename
+                )[1]
+            )
 
             output_filename = (
-                f"compressed_{base_name}"
-                f"{output_extension}"
+                f"{original_name}"
+                f"_compressed"
+                f"{extension}"
             )
 
             output_path = os.path.join(
-                output_folder,
+                output_directory,
                 output_filename
             )
 
-            try:
-
-                result = self.compress(
-                    input_path,
-                    output_path,
-                    quality=quality,
-                    target_format=target_format,
-                    scale_percent=scale_percent
+            # Avoid accidentally overwriting an existing
+            # output file.
+            output_path = (
+                self._get_unique_output_path(
+                    output_path
                 )
+            )
 
-                result["filename"] = filename
-                result["success"] = True
+            result = self.compress(
+                input_path=input_path,
+                output_path=output_path,
+                output_format=output_format
+            )
 
-                results.append(result)
-
-            except Exception as error:
-
-                results.append({
-                    "filename": filename,
-                    "success": False,
-                    "error": str(error)
-                })
+            results.append(
+                result
+            )
 
         return results
 
     # ==========================================================
-    # INTERNAL HELPERS
+    # UNIQUE OUTPUT PATH
     # ==========================================================
 
     @staticmethod
-    def _validate_input(input_path):
-
-        if not input_path:
-            raise ValueError(
-                "Input path cannot be empty."
-            )
-
-        if not os.path.isfile(input_path):
-            raise FileNotFoundError(
-                f"Input file not found: {input_path}"
-            )
-
-        extension = os.path.splitext(
-            input_path
-        )[1].lower()
-
-        if extension not in ImageCompressor.SUPPORTED_FORMATS:
-            raise ValueError(
-                f"Unsupported image format: {extension}"
-            )
-
-    @staticmethod
-    def _validate_quality(quality):
-
-        quality = int(quality)
-
-        if quality < 1:
-            return 1
-
-        if quality > 100:
-            return 100
-
-        return quality
-
-    @staticmethod
-    def _validate_scale(scale_percent):
-
-        scale_percent = float(scale_percent)
-
-        if scale_percent <= 0:
-            raise ValueError(
-                "Scale percent must be greater than 0."
-            )
-
-        return scale_percent
-
-    @staticmethod
-    def _normalize_extension(extension):
-
-        extension = extension.lower()
-
-        if extension == ".jpeg":
-            return ".jpg"
-
-        return extension
-
-    @staticmethod
-    def _resize(img, scale_percent):
-
-        new_width = max(
-            1,
-            int(img.width * scale_percent / 100)
-        )
-
-        new_height = max(
-            1,
-            int(img.height * scale_percent / 100)
-        )
-
-        return img.resize(
-            (new_width, new_height),
-            Image.Resampling.LANCZOS
-        )
-
-    @staticmethod
-    def _prepare_image_for_format(img, extension):
-
-        # JPEG does not support RGBA / transparency.
-        if extension in (".jpg", ".jpeg"):
-
-            if img.mode in (
-                "RGBA",
-                "LA",
-                "P"
-            ):
-                img = img.convert("RGB")
-
-        return img
-
-    def _build_save_options(
-        self,
-        extension,
-        quality,
-        exif=None
+    def _get_unique_output_path(
+        output_path
     ):
+        """
+        Return a unique output path.
 
-        # ------------------------------------------------------
-        # JPEG
-        # ------------------------------------------------------
+        Example:
 
-        if extension in (".jpg", ".jpeg"):
+            image_compressed.jpg
 
-            options = {
-                "quality": quality,
-                "optimize": True,
-                "progressive": True
-            }
+        becomes:
 
-            if self.keep_exif and exif:
-                options["exif"] = exif
+            image_compressed_1.jpg
+        """
 
-            return options
+        if not os.path.exists(
+            output_path
+        ):
 
-        # ------------------------------------------------------
-        # WEBP
-        # ------------------------------------------------------
+            return output_path
 
-        if extension == ".webp":
+        directory = os.path.dirname(
+            output_path
+        )
 
-            options = {
-                "quality": quality,
-                "method": 6
-            }
+        filename = os.path.basename(
+            output_path
+        )
 
-            if self.keep_exif and exif:
-                options["exif"] = exif
+        name, extension = (
+            os.path.splitext(
+                filename
+            )
+        )
 
-            return options
+        counter = 1
 
-        # ------------------------------------------------------
-        # PNG
-        # ------------------------------------------------------
+        while True:
 
-        if extension == ".png":
+            candidate = os.path.join(
+                directory,
+                f"{name}_{counter}"
+                f"{extension}"
+            )
+
+            if not os.path.exists(
+                candidate
+            ):
+
+                return candidate
+
+            counter += 1
+
+    # ==========================================================
+    # COMPRESSION STATISTICS
+    # ==========================================================
+
+    @staticmethod
+    def calculate_statistics(
+        results
+    ):
+        """
+        Calculate aggregate compression statistics.
+
+        Args:
+            results:
+                List returned by compress_batch().
+
+        Returns:
+            Dictionary containing aggregate statistics.
+        """
+
+        if not results:
 
             return {
-                "optimize": True,
-                "compress_level": 9
+                "total_files": 0,
+                "successful_files": 0,
+                "failed_files": 0,
+                "original_size": 0,
+                "new_size": 0,
+                "saved_bytes": 0,
+                "saving_percentage": 0.0,
+                "compression_ratio": 0.0,
+                "total_processing_time": 0.0,
             }
 
-        # ------------------------------------------------------
-        # FALLBACK
-        # ------------------------------------------------------
+        successful_results = [
+            result
+            for result in results
+            if result.get(
+                "success",
+                False
+            )
+        ]
 
-        options = {}
+        failed_results = [
+            result
+            for result in results
+            if not result.get(
+                "success",
+                False
+            )
+        ]
 
-        if self.keep_exif and exif:
-            options["exif"] = exif
+        total_original = sum(
+            result.get(
+                "original_size",
+                0
+            )
+            for result in successful_results
+        )
 
-        return options
+        total_new = sum(
+            result.get(
+                "new_size",
+                0
+            )
+            for result in successful_results
+        )
+
+        saved_bytes = max(
+            0,
+            total_original - total_new
+        )
+
+        saving_percentage = (
+            (
+                saved_bytes
+                / total_original
+            ) * 100
+            if total_original > 0
+            else 0
+        )
+
+        compression_ratio = (
+            total_original / total_new
+            if total_new > 0
+            else 0
+        )
+
+        processing_time = sum(
+            result.get(
+                "processing_time",
+                0
+            )
+            for result in results
+        )
+
+        return {
+            "total_files": len(
+                results
+            ),
+            "successful_files": len(
+                successful_results
+            ),
+            "failed_files": len(
+                failed_results
+            ),
+            "original_size": total_original,
+            "new_size": total_new,
+            "saved_bytes": saved_bytes,
+            "saving_percentage": round(
+                saving_percentage,
+                2
+            ),
+            "compression_ratio": round(
+                compression_ratio,
+                2
+            ),
+            "total_processing_time": round(
+                processing_time,
+                4
+            ),
+        }
 
     # ==========================================================
-    # STATISTICS
+    # PREVIEW
     # ==========================================================
 
     @staticmethod
-    def compression_ratio(
-        original,
-        compressed
+    def get_image_info(
+        input_path
     ):
         """
-        Returns percentage of saved space.
+        Read basic information about an image.
+
+        Returns:
+            Dictionary containing image metadata.
         """
 
-        if original <= 0:
-            return 0
+        ImageCompressor._validate_input_file(
+            input_path
+        )
 
-        return (
-            (original - compressed)
-            / original
-        ) * 100
+        file_size = os.path.getsize(
+            input_path
+        )
 
-    @staticmethod
-    def format_size(size):
+        with Image.open(
+            input_path
+        ) as image:
+
+            return {
+                "filename": os.path.basename(
+                    input_path
+                ),
+                "path": input_path,
+                "format": image.format,
+                "mode": image.mode,
+                "width": image.width,
+                "height": image.height,
+                "size": file_size,
+            }
+
+    # ==========================================================
+    # SUPPORTED FORMAT CHECK
+    # ==========================================================
+
+    @classmethod
+    def is_supported_format(
+        cls,
+        image_format
+    ):
         """
-        Convert bytes into a human-readable string.
+        Check whether a format is supported.
         """
 
-        kb = size / 1024
+        normalized = cls._normalize_format(
+            image_format
+        )
 
-        if kb < 1024:
-            return f"{kb:.2f} KB"
+        return normalized in (
+            "JPG",
+            "PNG",
+            "WEBP"
+        )
 
-        mb = kb / 1024
 
-        if mb < 1024:
-            return f"{mb:.2f} MB"
+# ==============================================================
+# SIMPLE TEST
+# ==============================================================
 
-        gb = mb / 1024
+if __name__ == "__main__":
 
-        return f"{gb:.2f} GB"
+    compressor = ImageCompressor(
+        quality=80
+    )
+
+    print(
+        "ImageCompressor engine initialized."
+    )
+
+    print(
+        "Supported formats:",
+        ", ".join(
+            sorted(
+                compressor.SUPPORTED_FORMATS
+            )
+        )
+    )
