@@ -1,4 +1,3 @@
-
 import os
 
 from PIL import Image
@@ -6,696 +5,94 @@ from PIL import Image
 
 class ImageOptimizer:
     """
-    Intelligent image optimization engine.
+    Image optimization engine.
 
-    This class analyzes an image and generates
-    compression recommendations.
-
-    It does not perform the actual compression.
-    Compression is handled by ImageCompressor.
+    Handles format-specific optimization such as:
+        - JPEG optimization
+        - PNG optimization
+        - WebP optimization
+        - Metadata removal
+        - EXIF handling
+        - Progressive JPEG
+        - Palette optimization
     """
 
-    SUPPORTED_FORMATS = (
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".webp"
-    )
+    SUPPORTED_FORMATS = {
+        "JPG",
+        "JPEG",
+        "PNG",
+        "WEBP",
+    }
 
     # ==========================================================
     # INITIALIZATION
     # ==========================================================
 
-    def __init__(self):
-        pass
-
-    # ==========================================================
-    # IMAGE ANALYSIS
-    # ==========================================================
-
-    def analyze(self, image_path):
-        """
-        Analyze an image and return useful information.
-
-        Returns:
-            {
-                "filename": ...,
-                "format": ...,
-                "width": ...,
-                "height": ...,
-                "resolution": ...,
-                "file_size": ...,
-                "file_size_mb": ...,
-                "mode": ...,
-                "has_transparency": ...,
-                "megapixels": ...
-            }
-        """
-
-        self._validate_image(image_path)
-
-        file_size = os.path.getsize(
-            image_path
-        )
-
-        with Image.open(image_path) as img:
-
-            width, height = img.size
-
-            return {
-                "filename": os.path.basename(
-                    image_path
-                ),
-
-                "format": (
-                    img.format
-                    or "UNKNOWN"
-                ).upper(),
-
-                "width": width,
-
-                "height": height,
-
-                "resolution": (
-                    f"{width}x{height}"
-                ),
-
-                "file_size": file_size,
-
-                "file_size_mb": round(
-                    file_size / (1024 * 1024),
-                    2
-                ),
-
-                "mode": img.mode,
-
-                "has_transparency": (
-                    self._has_transparency(img)
-                ),
-
-                "megapixels": round(
-                    (width * height) / 1_000_000,
-                    2
-                )
-            }
-
-    # ==========================================================
-    # SMART RECOMMENDATION
-    # ==========================================================
-
-    def recommend(
+    def __init__(
         self,
-        image_path,
-        target_size_kb=None
+        remove_metadata=True,
+        progressive=True
     ):
         """
-        Generate an optimization recommendation.
+        Initialize optimizer.
 
-        The recommendation considers:
+        Args:
+            remove_metadata:
+                Remove unnecessary image metadata.
 
-            - File size
-            - Image resolution
-            - Current format
-            - Transparency
-            - Target size
-
-        Returns:
-            recommendation dictionary
+            progressive:
+                Use progressive JPEG when possible.
         """
 
-        analysis = self.analyze(
-            image_path
+        self.remove_metadata = (
+            remove_metadata
         )
 
-        current_format = (
-            "." +
-            analysis["format"].lower()
-        )
-
-        file_size_mb = analysis[
-            "file_size_mb"
-        ]
-
-        width = analysis["width"]
-        height = analysis["height"]
-
-        has_transparency = analysis[
-            "has_transparency"
-        ]
-
-        # ------------------------------------------------------
-        # Determine recommended format
-        # ------------------------------------------------------
-
-        recommended_format = self._recommend_format(
-            current_format,
-            has_transparency
-        )
-
-        # ------------------------------------------------------
-        # Determine recommended quality
-        # ------------------------------------------------------
-
-        recommended_quality = self._recommend_quality(
-            file_size_mb,
-            current_format
-        )
-
-        # ------------------------------------------------------
-        # Determine recommended resize
-        # ------------------------------------------------------
-
-        recommended_scale = self._recommend_scale(
-            width,
-            height
-        )
-
-        # ------------------------------------------------------
-        # Target size optimization
-        # ------------------------------------------------------
-
-        if target_size_kb is not None:
-
-            recommended_quality = self._quality_for_target_size(
-                file_size_mb,
-                target_size_kb,
-                recommended_quality
-            )
-
-            recommended_scale = self._scale_for_target_size(
-                width,
-                height,
-                file_size_mb,
-                target_size_kb,
-                recommended_scale
-            )
-
-        # ------------------------------------------------------
-        # Estimated size
-        # ------------------------------------------------------
-
-        estimated_size = self.estimate_output_size(
-            original_size=analysis["file_size"],
-            quality=recommended_quality,
-            scale_percent=recommended_scale,
-            source_format=current_format,
-            target_format=recommended_format
-        )
-
-        estimated_saving = self.calculate_saving_percentage(
-            analysis["file_size"],
-            estimated_size
-        )
-
-        return {
-            "recommended_format": (
-                recommended_format
-                .replace(".", "")
-                .upper()
-            ),
-
-            "recommended_quality": (
-                recommended_quality
-            ),
-
-            "recommended_scale": (
-                recommended_scale
-            ),
-
-            "estimated_size": (
-                estimated_size
-            ),
-
-            "estimated_size_kb": round(
-                estimated_size / 1024,
-                2
-            ),
-
-            "estimated_size_mb": round(
-                estimated_size / (1024 * 1024),
-                2
-            ),
-
-            "estimated_saving": round(
-                estimated_saving,
-                2
-            ),
-
-            "target_size_reached": (
-                target_size_kb is None
-                or estimated_size <= target_size_kb * 1024
-            ),
-
-            "message": self._build_recommendation_message(
-                current_format=current_format,
-                recommended_format=recommended_format,
-                quality=recommended_quality,
-                scale_percent=recommended_scale,
-                estimated_saving=estimated_saving
-            )
-        }
-
-    # ==========================================================
-    # FORMAT RECOMMENDATION
-    # ==========================================================
-
-    def _recommend_format(
-        self,
-        current_format,
-        has_transparency
-    ):
-        """
-        Select the most suitable output format.
-
-        Rules:
-
-            PNG + transparency
-                -> WEBP
-
-            PNG without transparency
-                -> WEBP
-
-            JPG / JPEG
-                -> WEBP
-
-            WEBP
-                -> WEBP
-
-        WEBP is preferred for general-purpose
-        lossy image optimization.
-        """
-
-        if current_format in (
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".webp"
-        ):
-            return ".webp"
-
-        return current_format
-
-    # ==========================================================
-    # QUALITY RECOMMENDATION
-    # ==========================================================
-
-    def _recommend_quality(
-        self,
-        file_size_mb,
-        current_format
-    ):
-        """
-        Select a quality level according to
-        current file size and format.
-        """
-
-        # Very large images
-        if file_size_mb >= 10:
-
-            return 65
-
-        # Large images
-        if file_size_mb >= 5:
-
-            return 70
-
-        # Medium-large images
-        if file_size_mb >= 2:
-
-            return 75
-
-        # Medium images
-        if file_size_mb >= 1:
-
-            return 80
-
-        # Small images
-        return 85
-
-    # ==========================================================
-    # RESIZE RECOMMENDATION
-    # ==========================================================
-
-    def _recommend_scale(
-        self,
-        width,
-        height
-    ):
-        """
-        Recommend a resize percentage based
-        on image dimensions.
-        """
-
-        largest_dimension = max(
-            width,
-            height
-        )
-
-        if largest_dimension >= 6000:
-
-            return 50
-
-        if largest_dimension >= 4000:
-
-            return 60
-
-        if largest_dimension >= 3000:
-
-            return 70
-
-        if largest_dimension >= 2500:
-
-            return 75
-
-        if largest_dimension >= 2000:
-
-            return 85
-
-        return 100
-
-    # ==========================================================
-    # TARGET SIZE QUALITY
-    # ==========================================================
-
-    def _quality_for_target_size(
-        self,
-        file_size_mb,
-        target_size_kb,
-        current_quality
-    ):
-        """
-        Estimate a quality level for the requested
-        target file size.
-        """
-
-        current_size_kb = (
-            file_size_mb * 1024
-        )
-
-        if target_size_kb <= 0:
-            return current_quality
-
-        ratio = (
-            target_size_kb
-            / current_size_kb
-            if current_size_kb > 0
-            else 1
-        )
-
-        if ratio >= 0.8:
-
-            return max(
-                80,
-                current_quality
-            )
-
-        if ratio >= 0.6:
-
-            return 75
-
-        if ratio >= 0.4:
-
-            return 65
-
-        if ratio >= 0.25:
-
-            return 55
-
-        if ratio >= 0.15:
-
-            return 45
-
-        return 35
-
-    # ==========================================================
-    # TARGET SIZE SCALE
-    # ==========================================================
-
-    def _scale_for_target_size(
-        self,
-        width,
-        height,
-        file_size_mb,
-        target_size_kb,
-        current_scale
-    ):
-        """
-        Determine whether the image should also
-        be resized to reach the target size.
-        """
-
-        if target_size_kb <= 0:
-            return current_scale
-
-        current_size_kb = (
-            file_size_mb * 1024
-        )
-
-        if current_size_kb <= target_size_kb:
-            return 100
-
-        ratio = (
-            target_size_kb
-            / current_size_kb
-        )
-
-        # Target is relatively close.
-        if ratio >= 0.7:
-
-            return max(
-                current_scale,
-                85
-            )
-
-        # Moderate reduction.
-        if ratio >= 0.5:
-
-            return max(
-                current_scale,
-                75
-            )
-
-        # Strong reduction.
-        if ratio >= 0.3:
-
-            return max(
-                current_scale,
-                65
-            )
-
-        # Very strong reduction.
-        if ratio >= 0.15:
-
-            return max(
-                current_scale,
-                50
-            )
-
-        return max(
-            current_scale,
-            40
+        self.progressive = (
+            progressive
         )
 
     # ==========================================================
-    # OUTPUT SIZE ESTIMATION
-    # ==========================================================
-
-    def estimate_output_size(
-        self,
-        original_size,
-        quality,
-        scale_percent=100,
-        source_format=None,
-        target_format=None
-    ):
-        """
-        Estimate output file size.
-
-        This is an approximation. Actual size depends
-        heavily on image content.
-
-        The estimation considers:
-
-            - Quality
-            - Resize percentage
-            - Format efficiency
-        """
-
-        if original_size <= 0:
-            return 0
-
-        quality = max(
-            1,
-            min(
-                100,
-                int(quality)
-            )
-        )
-
-        scale_percent = max(
-            1,
-            float(scale_percent)
-        )
-
-        # ------------------------------------------------------
-        # Quality factor
-        # ------------------------------------------------------
-
-        quality_factor = (
-            0.15 +
-            0.85 *
-            (quality / 100)
-        )
-
-        # ------------------------------------------------------
-        # Resolution factor
-        #
-        # Image dimensions are scaled by X,
-        # therefore pixel count is approximately
-        # scaled by X².
-        # ------------------------------------------------------
-
-        scale_factor = (
-            scale_percent / 100
-        )
-
-        resolution_factor = (
-            scale_factor ** 2
-        )
-
-        # ------------------------------------------------------
-        # Format factor
-        # ------------------------------------------------------
-
-        format_factor = 1.0
-
-        if target_format:
-
-            target_format = (
-                target_format.lower()
-            )
-
-            if target_format == ".webp":
-
-                format_factor = 0.65
-
-            elif target_format in (
-                ".jpg",
-                ".jpeg"
-            ):
-
-                format_factor = 0.75
-
-            elif target_format == ".png":
-
-                format_factor = 1.0
-
-        estimated = (
-            original_size
-            * quality_factor
-            * resolution_factor
-            * format_factor
-        )
-
-        return max(
-            1,
-            int(estimated)
-        )
-
-    # ==========================================================
-    # SAVING CALCULATION
+    # FORMAT HELPERS
     # ==========================================================
 
     @staticmethod
-    def calculate_saving_percentage(
-        original_size,
-        output_size
+    def normalize_format(
+        image_format
     ):
         """
-        Calculate estimated space saving.
+        Normalize image format.
         """
 
-        if original_size <= 0:
-            return 0
+        if not image_format:
 
-        return (
-            (
-                original_size
-                - output_size
-            )
-            / original_size
-        ) * 100
+            return ""
+
+        normalized = str(
+            image_format
+        ).strip().upper()
+
+        normalized = normalized.replace(
+            ".",
+            ""
+        )
+
+        if normalized == "JPEG":
+
+            return "JPG"
+
+        return normalized
 
     # ==========================================================
-    # RECOMMENDATION MESSAGE
+    # IMAGE VALIDATION
     # ==========================================================
 
     @staticmethod
-    def _build_recommendation_message(
-        current_format,
-        recommended_format,
-        quality,
-        scale_percent,
-        estimated_saving
-    ):
-        """
-        Generate a human-readable recommendation.
-        """
-
-        current = (
-            current_format
-            .replace(".", "")
-            .upper()
-        )
-
-        recommended = (
-            recommended_format
-            .replace(".", "")
-            .upper()
-        )
-
-        if current != recommended:
-
-            format_message = (
-                f"Convert {current} to {recommended}"
-            )
-
-        else:
-
-            format_message = (
-                f"Keep {recommended} format"
-            )
-
-        if scale_percent < 100:
-
-            resize_message = (
-                f"resize to {scale_percent}%"
-            )
-
-        else:
-
-            resize_message = (
-                "keep original resolution"
-            )
-
-        return (
-            f"{format_message}, "
-            f"use quality {quality}%, "
-            f"{resize_message}. "
-            f"Estimated saving: "
-            f"{estimated_saving:.1f}%."
-        )
-
-    # ==========================================================
-    # VALIDATION
-    # ==========================================================
-
-    def _validate_image(
-        self,
+    def validate_image(
         image_path
     ):
         """
-        Validate image path and format.
+        Validate whether a file can be opened as an image.
         """
 
         if not image_path:
@@ -709,168 +106,811 @@ class ImageOptimizer:
         ):
 
             raise FileNotFoundError(
-                f"Image file not found: "
-                f"{image_path}"
+                f"Image not found: {image_path}"
             )
 
-        extension = os.path.splitext(
-            image_path
-        )[1].lower()
+        try:
 
-        if extension not in self.SUPPORTED_FORMATS:
+            with Image.open(
+                image_path
+            ) as image:
+
+                image.verify()
+
+            return True
+
+        except Exception as error:
 
             raise ValueError(
-                f"Unsupported image format: "
-                f"{extension}"
+                f"Invalid image file: {error}"
             )
 
     # ==========================================================
-    # TRANSPARENCY
+    # METADATA
     # ==========================================================
 
     @staticmethod
-    def _has_transparency(
-        img
+    def remove_image_metadata(
+        image
     ):
         """
-        Detect whether an image has transparency.
+        Remove image metadata by creating a clean copy.
+
+        This prevents unnecessary EXIF and application-specific
+        metadata from being carried into the optimized image.
         """
 
-        if img.mode in (
-            "RGBA",
-            "LA"
-        ):
-            return True
+        try:
 
-        if img.mode == "P":
-
-            return (
-                "transparency"
-                in img.info
+            clean_image = Image.new(
+                image.mode,
+                image.size
             )
 
-        return False
+            clean_image.putdata(
+                list(
+                    image.getdata()
+                )
+            )
+
+            return clean_image
+
+        except Exception:
+
+            return image.copy()
 
     # ==========================================================
-    # TARGET SIZE QUALITY SEARCH
+    # JPEG OPTIMIZATION
     # ==========================================================
 
-    def find_best_quality_for_target(
+    def optimize_jpeg(
         self,
-        image_path,
-        target_size_kb,
-        compressor,
-        output_path,
-        min_quality=5,
-        max_quality=100
+        image,
+        quality=80
     ):
         """
-        Find the highest possible quality that
-        satisfies the target size.
-
-        This method delegates the actual compression
-        to ImageCompressor.
-
-        Parameters:
-
-            image_path:
-                Source image.
-
-            target_size_kb:
-                Maximum target size.
-
-            compressor:
-                ImageCompressor instance.
-
-            output_path:
-                Temporary/final output path.
-
-        Returns:
-
-            {
-                "quality": ...,
-                "size": ...,
-                "target_reached": ...
-            }
+        Prepare a JPEG image for optimized saving.
         """
 
-        if target_size_kb <= 0:
-
-            raise ValueError(
-                "Target size must be greater than 0 KB."
-            )
-
-        target_bytes = (
-            target_size_kb * 1024
+        quality = self._validate_quality(
+            quality
         )
 
-        low = max(
-            1,
-            int(min_quality)
-        )
+        # JPEG does not support transparency.
+        if image.mode in (
+            "RGBA",
+            "LA",
+            "P"
+        ):
 
-        high = min(
-            100,
-            int(max_quality)
-        )
+            if image.mode == "P":
 
-        best_quality = low
-        best_size = None
+                image = image.convert(
+                    "RGBA"
+                )
 
-        while low <= high:
+            if image.mode in (
+                "RGBA",
+                "LA"
+            ):
 
-            quality = (
-                low + high
-            ) // 2
+                background = Image.new(
+                    "RGB",
+                    image.size,
+                    "white"
+                )
 
-            compressor.compress(
-                image_path,
-                output_path,
-                quality=quality
-            )
+                alpha = image.getchannel(
+                    "A"
+                )
 
-            current_size = os.path.getsize(
-                output_path
-            )
+                background.paste(
+                    image,
+                    mask=alpha
+                )
 
-            if current_size <= target_bytes:
-
-                best_quality = quality
-                best_size = current_size
-
-                low = quality + 1
+                image = background
 
             else:
 
-                high = quality - 1
+                image = image.convert(
+                    "RGB"
+                )
 
-        # Final output with best quality
-        compressor.compress(
-            image_path,
-            output_path,
-            quality=best_quality
+        elif image.mode != "RGB":
+
+            image = image.convert(
+                "RGB"
+            )
+
+        if self.remove_metadata:
+
+            image = self.remove_image_metadata(
+                image
+            )
+
+        save_options = {
+            "format": "JPEG",
+            "quality": quality,
+            "optimize": True,
+        }
+
+        if self.progressive:
+
+            save_options[
+                "progressive"
+            ] = True
+
+        return image, save_options
+
+    # ==========================================================
+    # PNG OPTIMIZATION
+    # ==========================================================
+
+    def optimize_png(
+        self,
+        image
+    ):
+        """
+        Prepare PNG image for optimized saving.
+
+        PNG compression is lossless, so JPEG-style quality
+        is intentionally not applied.
+        """
+
+        if self.remove_metadata:
+
+            image = self.remove_image_metadata(
+                image
+            )
+
+        save_options = {
+            "format": "PNG",
+            "optimize": True,
+        }
+
+        return image, save_options
+
+    # ==========================================================
+    # WEBP OPTIMIZATION
+    # ==========================================================
+
+    def optimize_webp(
+        self,
+        image,
+        quality=80,
+        lossless=False
+    ):
+        """
+        Prepare WebP image for optimized saving.
+
+        Args:
+            quality:
+                WebP quality from 1 to 100.
+
+            lossless:
+                Whether to use lossless WebP.
+        """
+
+        quality = self._validate_quality(
+            quality
         )
 
-        best_size = os.path.getsize(
+        if self.remove_metadata:
+
+            image = self.remove_image_metadata(
+                image
+            )
+
+        save_options = {
+            "format": "WEBP",
+            "method": 6,
+        }
+
+        if lossless:
+
+            save_options[
+                "lossless"
+            ] = True
+
+        else:
+
+            save_options[
+                "quality"
+            ] = quality
+
+        return image, save_options
+
+    # ==========================================================
+    # GENERAL OPTIMIZATION
+    # ==========================================================
+
+    def optimize(
+        self,
+        image_path,
+        output_path,
+        output_format=None,
+        quality=80,
+        webp_lossless=False
+    ):
+        """
+        Optimize and save an image.
+
+        Args:
+            image_path:
+                Original image path.
+
+            output_path:
+                Destination path.
+
+            output_format:
+                JPG, PNG or WEBP.
+
+            quality:
+                Compression quality.
+
+            webp_lossless:
+                Use lossless WebP.
+
+        Returns:
+            Dictionary containing optimization information.
+        """
+
+        self.validate_image(
+            image_path
+        )
+
+        if not output_path:
+
+            raise ValueError(
+                "Output path cannot be empty."
+            )
+
+        os.makedirs(
+            os.path.dirname(
+                os.path.abspath(
+                    output_path
+                )
+            ),
+            exist_ok=True
+        )
+
+        with Image.open(
+            image_path
+        ) as original_image:
+
+            source_format = (
+                self.normalize_format(
+                    original_image.format
+                )
+            )
+
+            if output_format:
+
+                target_format = (
+                    self.normalize_format(
+                        output_format
+                    )
+                )
+
+            else:
+
+                target_format = (
+                    source_format
+                )
+
+            if target_format == "JPG":
+
+                image, save_options = (
+                    self.optimize_jpeg(
+                        original_image,
+                        quality
+                    )
+                )
+
+            elif target_format == "PNG":
+
+                image, save_options = (
+                    self.optimize_png(
+                        original_image
+                    )
+                )
+
+            elif target_format == "WEBP":
+
+                image, save_options = (
+                    self.optimize_webp(
+                        original_image,
+                        quality,
+                        webp_lossless
+                    )
+                )
+
+            else:
+
+                raise ValueError(
+                    (
+                        "Unsupported output format: "
+                        f"{target_format}"
+                    )
+                )
+
+            image.save(
+                output_path,
+                **save_options
+            )
+
+        original_size = os.path.getsize(
+            image_path
+        )
+
+        optimized_size = os.path.getsize(
             output_path
         )
 
+        saved_bytes = max(
+            0,
+            original_size - optimized_size
+        )
+
+        saving_percentage = (
+            (
+                saved_bytes
+                / original_size
+            ) * 100
+            if original_size > 0
+            else 0
+        )
+
         return {
-            "quality": best_quality,
-            "size": best_size,
-            "size_kb": round(
-                best_size / 1024,
+            "success": True,
+            "input_path": image_path,
+            "output_path": output_path,
+            "source_format": source_format,
+            "output_format": target_format,
+            "original_size": original_size,
+            "optimized_size": optimized_size,
+            "saved_bytes": saved_bytes,
+            "saving_percentage": round(
+                saving_percentage,
                 2
             ),
-            "target_size_kb": target_size_kb,
-            "target_reached": (
-                best_size <= target_bytes
+            "metadata_removed": (
+                self.remove_metadata
             ),
-            "difference_kb": round(
-                (
-                    best_size
-                    - target_bytes
-                ) / 1024,
-                2
-            )
         }
+
+    # ==========================================================
+    # OPTIMIZATION LEVEL
+    # ==========================================================
+
+    def optimize_with_level(
+        self,
+        image_path,
+        output_path,
+        level="balanced"
+    ):
+        """
+        Optimize an image using a predefined optimization level.
+
+        Levels:
+            light
+            balanced
+            aggressive
+        """
+
+        level = str(
+            level
+        ).strip().lower()
+
+        levels = {
+            "light": {
+                "quality": 90,
+                "webp_lossless": False,
+            },
+
+            "balanced": {
+                "quality": 80,
+                "webp_lossless": False,
+            },
+
+            "aggressive": {
+                "quality": 60,
+                "webp_lossless": False,
+            },
+        }
+
+        if level not in levels:
+
+            raise ValueError(
+                (
+                    "Invalid optimization level. "
+                    "Choose: light, balanced or aggressive."
+                )
+            )
+
+        settings = levels[
+            level
+        ]
+
+        return self.optimize(
+            image_path=image_path,
+            output_path=output_path,
+            quality=settings[
+                "quality"
+            ],
+            webp_lossless=settings[
+                "webp_lossless"
+            ]
+        )
+
+    # ==========================================================
+    # QUALITY VALIDATION
+    # ==========================================================
+
+    @staticmethod
+    def _validate_quality(
+        quality
+    ):
+        """
+        Validate quality between 1 and 100.
+        """
+
+        try:
+
+            quality = int(
+                quality
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            quality = 80
+
+        return max(
+            1,
+            min(
+                100,
+                quality
+            )
+        )
+
+    # ==========================================================
+    # ESTIMATE COMPRESSION
+    # ==========================================================
+
+    @staticmethod
+    def estimate_compression(
+        original_size,
+        quality=80
+    ):
+        """
+        Estimate approximate output size.
+
+        This is only an estimation and should not be treated
+        as the actual compressed size.
+        """
+
+        try:
+
+            original_size = float(
+                original_size
+            )
+
+            quality = int(
+                quality
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            return 0
+
+        quality = max(
+            1,
+            min(
+                100,
+                quality
+            )
+        )
+
+        if original_size <= 0:
+
+            return 0
+
+        # Approximate relationship for UI previews.
+        compression_factor = (
+            0.15
+            + (
+                quality / 100
+            ) * 0.65
+        )
+
+        estimated_size = (
+            original_size
+            * compression_factor
+        )
+
+        return int(
+            estimated_size
+        )
+
+    # ==========================================================
+    # COMPARE OPTIMIZATION
+    # ==========================================================
+
+    @staticmethod
+    def compare_sizes(
+        original_path,
+        optimized_path
+    ):
+        """
+        Compare original and optimized file sizes.
+        """
+
+        if not os.path.isfile(
+            original_path
+        ):
+
+            raise FileNotFoundError(
+                original_path
+            )
+
+        if not os.path.isfile(
+            optimized_path
+        ):
+
+            raise FileNotFoundError(
+                optimized_path
+            )
+
+        original_size = os.path.getsize(
+            original_path
+        )
+
+        optimized_size = os.path.getsize(
+            optimized_path
+        )
+
+        saved_bytes = (
+            original_size
+            - optimized_size
+        )
+
+        saving_percentage = (
+            (
+                saved_bytes
+                / original_size
+            ) * 100
+            if original_size > 0
+            else 0
+        )
+
+        return {
+            "original_size": original_size,
+            "optimized_size": optimized_size,
+            "saved_bytes": saved_bytes,
+            "saving_percentage": round(
+                saving_percentage,
+                2
+            ),
+        }
+
+    # ==========================================================
+    # BATCH OPTIMIZATION
+    # ==========================================================
+
+    def optimize_batch(
+        self,
+        image_paths,
+        output_directory,
+        output_format=None,
+        quality=80
+    ):
+        """
+        Optimize multiple images.
+        """
+
+        if not image_paths:
+
+            return []
+
+        if not output_directory:
+
+            raise ValueError(
+                "Output directory cannot be empty."
+            )
+
+        os.makedirs(
+            output_directory,
+            exist_ok=True
+        )
+
+        results = []
+
+        for image_path in image_paths:
+
+            filename = os.path.basename(
+                image_path
+            )
+
+            name, extension = (
+                os.path.splitext(
+                    filename
+                )
+            )
+
+            target_format = (
+                self.normalize_format(
+                    output_format
+                )
+                if output_format
+                else self.normalize_format(
+                    extension
+                )
+            )
+
+            extension_map = {
+                "JPG": ".jpg",
+                "PNG": ".png",
+                "WEBP": ".webp",
+            }
+
+            target_extension = (
+                extension_map.get(
+                    target_format,
+                    extension
+                )
+            )
+
+            output_filename = (
+                f"{name}_optimized"
+                f"{target_extension}"
+            )
+
+            output_path = os.path.join(
+                output_directory,
+                output_filename
+            )
+
+            output_path = (
+                self._get_unique_path(
+                    output_path
+                )
+            )
+
+            try:
+
+                result = self.optimize(
+                    image_path=image_path,
+                    output_path=output_path,
+                    output_format=output_format,
+                    quality=quality
+                )
+
+                results.append(
+                    result
+                )
+
+            except Exception as error:
+
+                results.append(
+                    {
+                        "success": False,
+                        "input_path": image_path,
+                        "output_path": output_path,
+                        "error": str(
+                            error
+                        ),
+                    }
+                )
+
+        return results
+
+    # ==========================================================
+    # UNIQUE PATH
+    # ==========================================================
+
+    @staticmethod
+    def _get_unique_path(
+        file_path
+    ):
+        """
+        Return a unique path without overwriting files.
+        """
+
+        if not os.path.exists(
+            file_path
+        ):
+
+            return file_path
+
+        directory = os.path.dirname(
+            file_path
+        )
+
+        filename = os.path.basename(
+            file_path
+        )
+
+        name, extension = (
+            os.path.splitext(
+                filename
+            )
+        )
+
+        counter = 1
+
+        while True:
+
+            candidate = os.path.join(
+                directory,
+                f"{name}_{counter}"
+                f"{extension}"
+            )
+
+            if not os.path.exists(
+                candidate
+            ):
+
+                return candidate
+
+            counter += 1
+
+    # ==========================================================
+    # SUPPORTED FORMAT
+    # ==========================================================
+
+    @classmethod
+    def is_supported_format(
+        cls,
+        image_format
+    ):
+        """
+        Check if image format is supported.
+        """
+
+        normalized = cls.normalize_format(
+            image_format
+        )
+
+        return normalized in (
+            "JPG",
+            "PNG",
+            "WEBP"
+        )
+
+
+# ==============================================================
+# SIMPLE TEST
+# ==============================================================
+
+if __name__ == "__main__":
+
+    optimizer = ImageOptimizer()
+
+    print(
+        "ImageOptimizer initialized."
+    )
+
+    print(
+        "Supported formats:",
+        ", ".join(
+            sorted(
+                optimizer.SUPPORTED_FORMATS
+            )
+        )
+    )
+
+    print(
+        "Estimated size for 10 MB at quality 80:",
+        optimizer.estimate_compression(
+            10 * 1024 * 1024,
+            80
+        ),
+        "bytes"
+    )
