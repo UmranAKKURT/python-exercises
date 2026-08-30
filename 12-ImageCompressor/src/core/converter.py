@@ -1,4 +1,3 @@
-
 import os
 
 from PIL import Image
@@ -9,592 +8,137 @@ class ImageConverter:
     Image format conversion engine.
 
     Supported formats:
-
-        JPG / JPEG
-        PNG
-        WEBP
-
-    This class is responsible only for format conversion.
-    Compression and optimization are handled by other
-    classes.
+        - JPG
+        - PNG
+        - WEBP
     """
 
-    SUPPORTED_FORMATS = (
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".webp"
-    )
+    SUPPORTED_FORMATS = {
+        "JPG",
+        "JPEG",
+        "PNG",
+        "WEBP",
+    }
+
+    FORMAT_EXTENSIONS = {
+        "JPG": ".jpg",
+        "PNG": ".png",
+        "WEBP": ".webp",
+    }
 
     # ==========================================================
-    # CONVERSION
+    # INITIALIZATION
     # ==========================================================
 
-    def convert(
-        self,
-        input_path,
-        output_path,
-        quality=90,
-        keep_exif=True
-    ):
+    def __init__(self):
         """
-        Convert an image from one format to another.
-
-        Parameters:
-            input_path:
-                Source image path.
-
-            output_path:
-                Destination image path.
-
-            quality:
-                Quality used for JPEG / WEBP.
-
-            keep_exif:
-                Preserve EXIF metadata when possible.
-
-        Returns:
-            Dictionary containing conversion information.
+        Initialize image converter.
         """
 
-        self._validate_input(
-            input_path
-        )
-
-        self._validate_output(
-            output_path
-        )
-
-        quality = self._validate_quality(
-            quality
-        )
-
-        source_extension = (
-            self._get_extension(
-                input_path
-            )
-        )
-
-        target_extension = (
-            self._get_extension(
-                output_path
-            )
-        )
-
-        if target_extension not in self.SUPPORTED_FORMATS:
-
-            raise ValueError(
-                f"Unsupported output format: "
-                f"{target_extension}"
-            )
-
-        # ------------------------------------------------------
-        # Open source image
-        # ------------------------------------------------------
-
-        with Image.open(
-            input_path
-        ) as source_image:
-
-            original_size = os.path.getsize(
-                input_path
-            )
-
-            original_resolution = (
-                source_image.size
-            )
-
-            original_format = (
-                source_image.format
-                or source_extension
-            )
-
-            exif = source_image.info.get(
-                "exif"
-            )
-
-            # --------------------------------------------------
-            # Copy image
-            # --------------------------------------------------
-
-            image = source_image.copy()
-
-            # --------------------------------------------------
-            # Prepare image according to target format
-            # --------------------------------------------------
-
-            image = self._prepare_image(
-                image,
-                target_extension
-            )
-
-            # --------------------------------------------------
-            # Build save options
-            # --------------------------------------------------
-
-            save_options = (
-                self._build_save_options(
-                    target_extension,
-                    quality,
-                    exif,
-                    keep_exif
-                )
-            )
-
-            # --------------------------------------------------
-            # Save
-            # --------------------------------------------------
-
-            image.save(
-                output_path,
-                **save_options
-            )
-
-        # ------------------------------------------------------
-        # Result information
-        # ------------------------------------------------------
-
-        new_size = os.path.getsize(
-            output_path
-        )
-
-        return {
-            "input_path": input_path,
-            "output_path": output_path,
-
-            "source_format": (
-                str(
-                    original_format
-                ).replace(
-                    ".",
-                    ""
-                ).upper()
-            ),
-
-            "target_format": (
-                target_extension
-                .replace(
-                    ".",
-                    ""
-                )
-                .upper()
-            ),
-
-            "original_size": original_size,
-
-            "new_size": new_size,
-
-            "saved_bytes": max(
-                0,
-                original_size - new_size
-            ),
-
-            "saving_percentage": (
-                self._calculate_saving(
-                    original_size,
-                    new_size
-                )
-            ),
-
-            "original_resolution": (
-                original_resolution
-            ),
-
-            "new_resolution": (
-                image.size
-            )
-        }
+        pass
 
     # ==========================================================
-    # BATCH CONVERSION
-    # ==========================================================
-
-    def batch_convert(
-        self,
-        input_folder,
-        output_folder,
-        target_format,
-        quality=90,
-        keep_exif=True
-    ):
-        """
-        Convert all supported images in a folder.
-
-        Returns a list containing successful and failed
-        conversion results.
-        """
-
-        if not os.path.isdir(
-            input_folder
-        ):
-
-            raise ValueError(
-                f"Input folder does not exist: "
-                f"{input_folder}"
-            )
-
-        target_format = (
-            self._normalize_extension(
-                target_format
-            )
-        )
-
-        if target_format not in self.SUPPORTED_FORMATS:
-
-            raise ValueError(
-                f"Unsupported target format: "
-                f"{target_format}"
-            )
-
-        os.makedirs(
-            output_folder,
-            exist_ok=True
-        )
-
-        results = []
-
-        for filename in os.listdir(
-            input_folder
-        ):
-
-            input_path = os.path.join(
-                input_folder,
-                filename
-            )
-
-            if not os.path.isfile(
-                input_path
-            ):
-                continue
-
-            source_extension = (
-                self._get_extension(
-                    input_path
-                )
-            )
-
-            if source_extension not in (
-                self.SUPPORTED_FORMATS
-            ):
-                continue
-
-            base_name = os.path.splitext(
-                filename
-            )[0]
-
-            output_filename = (
-                f"{base_name}"
-                f"{target_format}"
-            )
-
-            output_path = os.path.join(
-                output_folder,
-                output_filename
-            )
-
-            # Prevent overwriting files.
-            output_path = (
-                self._unique_output_path(
-                    output_path
-                )
-            )
-
-            try:
-
-                result = self.convert(
-                    input_path=input_path,
-                    output_path=output_path,
-                    quality=quality,
-                    keep_exif=keep_exif
-                )
-
-                result["filename"] = filename
-                result["success"] = True
-
-                results.append(
-                    result
-                )
-
-            except Exception as error:
-
-                results.append({
-                    "filename": filename,
-                    "success": False,
-                    "error": str(error)
-                })
-
-        return results
-
-    # ==========================================================
-    # IMAGE PREPARATION
+    # FORMAT NORMALIZATION
     # ==========================================================
 
     @staticmethod
-    def _prepare_image(
-        image,
-        target_extension
+    def normalize_format(
+        image_format
     ):
         """
-        Prepare image for the destination format.
+        Normalize an image format.
 
-        JPEG does not support alpha channels, therefore
-        transparent images are converted to RGB.
+        Examples:
+            jpg  -> JPG
+            .png -> PNG
+            jpeg -> JPG
         """
 
-        if target_extension in (
-            ".jpg",
-            ".jpeg"
-        ):
+        if not image_format:
 
-            if image.mode in (
-                "RGBA",
-                "LA",
-                "P"
-            ):
+            return ""
 
-                # ------------------------------------------------
-                # Handle transparency.
-                #
-                # Instead of blindly dropping alpha values,
-                # composite the image onto a white background.
-                # ------------------------------------------------
+        normalized = str(
+            image_format
+        ).strip().upper()
 
-                if image.mode in (
-                    "RGBA",
-                    "LA"
-                ):
-
-                    rgba_image = image.convert(
-                        "RGBA"
-                    )
-
-                    background = Image.new(
-                        "RGB",
-                        rgba_image.size,
-                        "white"
-                    )
-
-                    background.paste(
-                        rgba_image,
-                        mask=rgba_image.getchannel(
-                            "A"
-                        )
-                    )
-
-                    image = background
-
-                else:
-
-                    image = image.convert(
-                        "RGB"
-                    )
-
-        elif target_extension == ".png":
-
-            # PNG supports RGB, RGBA and several other modes.
-            #
-            # We only convert unusual modes when necessary.
-            if image.mode not in (
-                "1",
-                "L",
-                "LA",
-                "P",
-                "RGB",
-                "RGBA"
-            ):
-
-                image = image.convert(
-                    "RGBA"
-                )
-
-        elif target_extension == ".webp":
-
-            # WEBP supports RGB and RGBA.
-            if image.mode not in (
-                "RGB",
-                "RGBA"
-            ):
-
-                if image.mode in (
-                    "P",
-                    "LA"
-                ):
-
-                    image = image.convert(
-                        "RGBA"
-                    )
-
-                else:
-
-                    image = image.convert(
-                        "RGB"
-                    )
-
-        return image
-
-    # ==========================================================
-    # SAVE OPTIONS
-    # ==========================================================
-
-    @staticmethod
-    def _build_save_options(
-        target_extension,
-        quality,
-        exif,
-        keep_exif
-    ):
-        """
-        Create format-specific Pillow save options.
-        """
-
-        # ------------------------------------------------------
-        # JPEG
-        # ------------------------------------------------------
-
-        if target_extension in (
-            ".jpg",
-            ".jpeg"
-        ):
-
-            options = {
-                "format": "JPEG",
-                "quality": quality,
-                "optimize": True,
-                "progressive": True
-            }
-
-            if keep_exif and exif:
-
-                options["exif"] = exif
-
-            return options
-
-        # ------------------------------------------------------
-        # WEBP
-        # ------------------------------------------------------
-
-        if target_extension == ".webp":
-
-            options = {
-                "format": "WEBP",
-                "quality": quality,
-                "method": 6
-            }
-
-            if keep_exif and exif:
-
-                options["exif"] = exif
-
-            return options
-
-        # ------------------------------------------------------
-        # PNG
-        # ------------------------------------------------------
-
-        if target_extension == ".png":
-
-            return {
-                "format": "PNG",
-                "optimize": True,
-                "compress_level": 9
-            }
-
-        raise ValueError(
-            f"Unsupported format: "
-            f"{target_extension}"
+        normalized = normalized.replace(
+            ".",
+            ""
         )
 
+        if normalized == "JPEG":
+
+            return "JPG"
+
+        return normalized
+
     # ==========================================================
-    # FORMAT HELPERS
+    # FORMAT VALIDATION
     # ==========================================================
 
     @classmethod
-    def is_supported(
+    def is_supported_format(
         cls,
-        path
+        image_format
     ):
         """
-        Check whether a file uses a supported format.
+        Check whether a format is supported.
         """
 
-        extension = os.path.splitext(
-            path
-        )[1].lower()
+        normalized = cls.normalize_format(
+            image_format
+        )
 
-        return extension in cls.SUPPORTED_FORMATS
+        return normalized in {
+            "JPG",
+            "PNG",
+            "WEBP",
+        }
 
-    @staticmethod
-    def _normalize_extension(
-        extension
+    @classmethod
+    def validate_format(
+        cls,
+        image_format
     ):
         """
-        Normalize format names.
-
-        Examples:
-
-            jpg
-            .jpg
-            JPEG
-            .JPEG
-
-        all become:
-
-            .jpg
+        Validate target image format.
         """
 
-        extension = str(
-            extension
-        ).strip().lower()
+        normalized = cls.normalize_format(
+            image_format
+        )
 
-        if not extension.startswith(
-            "."
+        if not cls.is_supported_format(
+            normalized
         ):
 
-            extension = (
-                "."
-                + extension
+            raise ValueError(
+                (
+                    f"Unsupported image format: "
+                    f"{image_format}. "
+                    "Supported formats: JPG, PNG, WEBP."
+                )
             )
 
-        if extension == ".jpeg":
+        return normalized
 
-            return ".jpg"
-
-        return extension
+    # ==========================================================
+    # FILE VALIDATION
+    # ==========================================================
 
     @staticmethod
-    def _get_extension(
-        path
-    ):
-        """
-        Get normalized file extension.
-        """
-
-        extension = os.path.splitext(
-            path
-        )[1].lower()
-
-        if extension == ".jpeg":
-
-            return ".jpg"
-
-        return extension
-
-    # ==========================================================
-    # VALIDATION
-    # ==========================================================
-
-    def _validate_input(
-        self,
+    def validate_input(
         input_path
     ):
         """
-        Validate source image.
+        Validate input image path.
         """
 
         if not input_path:
 
             raise ValueError(
-                "Input path cannot be empty."
+                "Input image path cannot be empty."
             )
 
         if not os.path.isfile(
@@ -602,70 +146,183 @@ class ImageConverter:
         ):
 
             raise FileNotFoundError(
-                f"Input file not found: "
-                f"{input_path}"
+                f"Input image not found: {input_path}"
             )
 
-        if not self.is_supported(
-            input_path
-        ):
-
-            extension = self._get_extension(
-                input_path
-            )
-
-            raise ValueError(
-                f"Unsupported input format: "
-                f"{extension}"
-            )
-
-    def _validate_output(
-        self,
-        output_path
-    ):
-        """
-        Validate output path and format.
-        """
-
-        if not output_path:
-
-            raise ValueError(
-                "Output path cannot be empty."
-            )
-
-        extension = self._get_extension(
-            output_path
-        )
-
-        if extension not in self.SUPPORTED_FORMATS:
-
-            raise ValueError(
-                f"Unsupported output format: "
-                f"{extension}"
-            )
-
-        output_directory = os.path.dirname(
-            os.path.abspath(
-                output_path
-            )
-        )
-
-        os.makedirs(
-            output_directory,
-            exist_ok=True
-        )
+        return True
 
     # ==========================================================
-    # QUALITY VALIDATION
+    # IMAGE MODE PREPARATION
     # ==========================================================
 
     @staticmethod
-    def _validate_quality(
-        quality
+    def prepare_for_jpeg(
+        image
     ):
         """
-        Keep quality between 1 and 100.
+        Prepare an image for JPEG conversion.
+
+        JPEG does not support transparency.
+        Transparent images are placed on a white background.
         """
+
+        if image.mode == "RGB":
+
+            return image
+
+        if image.mode in (
+            "RGBA",
+            "LA"
+        ):
+
+            rgba_image = image.convert(
+                "RGBA"
+            )
+
+            background = Image.new(
+                "RGB",
+                rgba_image.size,
+                "white"
+            )
+
+            background.paste(
+                rgba_image,
+                mask=rgba_image.getchannel(
+                    "A"
+                )
+            )
+
+            return background
+
+        if image.mode == "P":
+
+            converted = image.convert(
+                "RGBA"
+            )
+
+            background = Image.new(
+                "RGB",
+                converted.size,
+                "white"
+            )
+
+            background.paste(
+                converted,
+                mask=converted.getchannel(
+                    "A"
+                )
+            )
+
+            return background
+
+        return image.convert(
+            "RGB"
+        )
+
+    @staticmethod
+    def prepare_for_png(
+        image
+    ):
+        """
+        Prepare image for PNG conversion.
+
+        PNG supports RGB, RGBA and palette modes.
+        """
+
+        if image.mode in (
+            "RGB",
+            "RGBA",
+            "P",
+            "L",
+            "LA"
+        ):
+
+            return image
+
+        return image.convert(
+            "RGBA"
+        )
+
+    @staticmethod
+    def prepare_for_webp(
+        image
+    ):
+        """
+        Prepare image for WebP conversion.
+        """
+
+        if image.mode in (
+            "RGB",
+            "RGBA",
+            "L",
+            "LA"
+        ):
+
+            return image
+
+        return image.convert(
+            "RGBA"
+        )
+
+    # ==========================================================
+    # PREPARE IMAGE
+    # ==========================================================
+
+    def prepare_image(
+        self,
+        image,
+        target_format
+    ):
+        """
+        Prepare image according to target format.
+        """
+
+        target_format = self.validate_format(
+            target_format
+        )
+
+        if target_format == "JPG":
+
+            return self.prepare_for_jpeg(
+                image
+            )
+
+        if target_format == "PNG":
+
+            return self.prepare_for_png(
+                image
+            )
+
+        if target_format == "WEBP":
+
+            return self.prepare_for_webp(
+                image
+            )
+
+        raise ValueError(
+            f"Unsupported format: {target_format}"
+        )
+
+    # ==========================================================
+    # SAVE OPTIONS
+    # ==========================================================
+
+    @staticmethod
+    def get_save_options(
+        target_format,
+        quality=90,
+        lossless=False
+    ):
+        """
+        Return Pillow save options for target format.
+        """
+
+        target_format = (
+            ImageConverter
+            .validate_format(
+                target_format
+            )
+        )
 
         try:
 
@@ -680,7 +337,7 @@ class ImageConverter:
 
             quality = 90
 
-        return max(
+        quality = max(
             1,
             min(
                 100,
@@ -688,69 +345,134 @@ class ImageConverter:
             )
         )
 
-    # ==========================================================
-    # CALCULATIONS
-    # ==========================================================
+        if target_format == "JPG":
 
-    @staticmethod
-    def _calculate_saving(
-        original_size,
-        new_size
-    ):
-        """
-        Calculate percentage of saved space.
-        """
+            return {
+                "format": "JPEG",
+                "quality": quality,
+                "optimize": True,
+                "progressive": True,
+            }
 
-        if original_size <= 0:
+        if target_format == "PNG":
 
-            return 0
+            return {
+                "format": "PNG",
+                "optimize": True,
+            }
 
-        saving = (
-            (
-                original_size
-                - new_size
-            )
-            / original_size
-        ) * 100
+        if target_format == "WEBP":
 
-        return round(
-            max(
-                0,
-                saving
-            ),
-            2
+            options = {
+                "format": "WEBP",
+                "method": 6,
+            }
+
+            if lossless:
+
+                options[
+                    "lossless"
+                ] = True
+
+            else:
+
+                options[
+                    "quality"
+                ] = quality
+
+            return options
+
+        raise ValueError(
+            f"Unsupported format: {target_format}"
         )
 
     # ==========================================================
-    # UNIQUE OUTPUT PATH
+    # OUTPUT PATH
     # ==========================================================
 
-    @staticmethod
-    def _unique_output_path(
-        path
+    def generate_output_path(
+        self,
+        input_path,
+        output_directory,
+        target_format,
+        suffix="_converted"
     ):
         """
-        Prevent overwriting an existing file.
-
-        Example:
-
-            image.webp
-            image_1.webp
-            image_2.webp
+        Generate output path for converted image.
         """
 
-        if not os.path.exists(
-            path
-        ):
+        self.validate_input(
+            input_path
+        )
 
-            return path
+        target_format = self.validate_format(
+            target_format
+        )
 
-        directory = os.path.dirname(
-            path
+        if not output_directory:
+
+            raise ValueError(
+                "Output directory cannot be empty."
+            )
+
+        os.makedirs(
+            output_directory,
+            exist_ok=True
         )
 
         filename = os.path.basename(
-            path
+            input_path
+        )
+
+        name, _ = os.path.splitext(
+            filename
+        )
+
+        extension = (
+            self.FORMAT_EXTENSIONS[
+                target_format
+            ]
+        )
+
+        output_filename = (
+            f"{name}"
+            f"{suffix}"
+            f"{extension}"
+        )
+
+        output_path = os.path.join(
+            output_directory,
+            output_filename
+        )
+
+        return self.get_unique_path(
+            output_path
+        )
+
+    # ==========================================================
+    # UNIQUE PATH
+    # ==========================================================
+
+    @staticmethod
+    def get_unique_path(
+        file_path
+    ):
+        """
+        Prevent accidental file overwriting.
+        """
+
+        if not os.path.exists(
+            file_path
+        ):
+
+            return file_path
+
+        directory = os.path.dirname(
+            file_path
+        )
+
+        filename = os.path.basename(
+            file_path
         )
 
         name, extension = (
@@ -763,21 +485,412 @@ class ImageConverter:
 
         while True:
 
-            new_filename = (
+            candidate = os.path.join(
+                directory,
                 f"{name}_{counter}"
                 f"{extension}"
             )
 
-            new_path = os.path.join(
-                directory,
-                new_filename
-            )
-
             if not os.path.exists(
-                new_path
+                candidate
             ):
 
-                return new_path
+                return candidate
 
             counter += 1
 
+    # ==========================================================
+    # SINGLE CONVERSION
+    # ==========================================================
+
+    def convert(
+        self,
+        input_path,
+        output_path,
+        target_format,
+        quality=90,
+        lossless=False
+    ):
+        """
+        Convert a single image.
+
+        Returns:
+            Dictionary containing conversion information.
+        """
+
+        self.validate_input(
+            input_path
+        )
+
+        target_format = self.validate_format(
+            target_format
+        )
+
+        if not output_path:
+
+            raise ValueError(
+                "Output path cannot be empty."
+            )
+
+        output_directory = os.path.dirname(
+            os.path.abspath(
+                output_path
+            )
+        )
+
+        os.makedirs(
+            output_directory,
+            exist_ok=True
+        )
+
+        original_size = os.path.getsize(
+            input_path
+        )
+
+        with Image.open(
+            input_path
+        ) as image:
+
+            source_format = (
+                self.normalize_format(
+                    image.format
+                )
+            )
+
+            original_width = image.width
+            original_height = image.height
+
+            prepared_image = (
+                self.prepare_image(
+                    image,
+                    target_format
+                )
+            )
+
+            save_options = (
+                self.get_save_options(
+                    target_format,
+                    quality,
+                    lossless
+                )
+            )
+
+            prepared_image.save(
+                output_path,
+                **save_options
+            )
+
+        new_size = os.path.getsize(
+            output_path
+        )
+
+        size_difference = (
+            original_size
+            - new_size
+        )
+
+        saving_percentage = (
+            (
+                size_difference
+                / original_size
+            ) * 100
+            if original_size > 0
+            else 0
+        )
+
+        return {
+            "success": True,
+            "input_path": input_path,
+            "output_path": output_path,
+            "filename": os.path.basename(
+                input_path
+            ),
+            "source_format": source_format,
+            "target_format": target_format,
+            "original_size": original_size,
+            "new_size": new_size,
+            "size_difference": size_difference,
+            "saving_percentage": round(
+                saving_percentage,
+                2
+            ),
+            "width": original_width,
+            "height": original_height,
+        }
+
+    # ==========================================================
+    # BATCH CONVERSION
+    # ==========================================================
+
+    def convert_batch(
+        self,
+        input_files,
+        output_directory,
+        target_format,
+        quality=90,
+        lossless=False
+    ):
+        """
+        Convert multiple images.
+        """
+
+        if not input_files:
+
+            return []
+
+        target_format = self.validate_format(
+            target_format
+        )
+
+        if not output_directory:
+
+            raise ValueError(
+                "Output directory cannot be empty."
+            )
+
+        os.makedirs(
+            output_directory,
+            exist_ok=True
+        )
+
+        results = []
+
+        for input_path in input_files:
+
+            try:
+
+                output_path = (
+                    self.generate_output_path(
+                        input_path,
+                        output_directory,
+                        target_format
+                    )
+                )
+
+                result = self.convert(
+                    input_path=input_path,
+                    output_path=output_path,
+                    target_format=target_format,
+                    quality=quality,
+                    lossless=lossless
+                )
+
+                results.append(
+                    result
+                )
+
+            except Exception as error:
+
+                results.append(
+                    {
+                        "success": False,
+                        "input_path": input_path,
+                        "output_path": None,
+                        "filename": os.path.basename(
+                            input_path
+                        ),
+                        "target_format": target_format,
+                        "error": str(
+                            error
+                        ),
+                    }
+                )
+
+        return results
+
+    # ==========================================================
+    # FORMAT DETECTION
+    # ==========================================================
+
+    @staticmethod
+    def detect_format(
+        image_path
+    ):
+        """
+        Detect actual image format using Pillow.
+        """
+
+        ImageConverter.validate_input(
+            image_path
+        )
+
+        with Image.open(
+            image_path
+        ) as image:
+
+            return ImageConverter.normalize_format(
+                image.format
+            )
+
+    # ==========================================================
+    # CONVERSION COMPATIBILITY
+    # ==========================================================
+
+    @classmethod
+    def can_convert(
+        cls,
+        source_format,
+        target_format
+    ):
+        """
+        Check whether source and target formats are supported.
+        """
+
+        source = cls.normalize_format(
+            source_format
+        )
+
+        target = cls.normalize_format(
+            target_format
+        )
+
+        return (
+            cls.is_supported_format(source)
+            and
+            cls.is_supported_format(target)
+        )
+
+    # ==========================================================
+    # FORMAT LIST
+    # ==========================================================
+
+    @classmethod
+    def get_supported_formats(
+        cls
+    ):
+        """
+        Return supported output formats.
+        """
+
+        return [
+            "JPG",
+            "PNG",
+            "WEBP",
+        ]
+
+    # ==========================================================
+    # CONVERSION SUMMARY
+    # ==========================================================
+
+    @staticmethod
+    def summarize_results(
+        results
+    ):
+        """
+        Create summary information for batch conversion.
+        """
+
+        if not results:
+
+            return {
+                "total": 0,
+                "successful": 0,
+                "failed": 0,
+                "original_size": 0,
+                "new_size": 0,
+                "size_difference": 0,
+                "saving_percentage": 0.0,
+            }
+
+        successful = [
+            result
+            for result in results
+            if result.get(
+                "success",
+                False
+            )
+        ]
+
+        failed = [
+            result
+            for result in results
+            if not result.get(
+                "success",
+                False
+            )
+        ]
+
+        original_size = sum(
+            result.get(
+                "original_size",
+                0
+            )
+            for result in successful
+        )
+
+        new_size = sum(
+            result.get(
+                "new_size",
+                0
+            )
+            for result in successful
+        )
+
+        size_difference = (
+            original_size
+            - new_size
+        )
+
+        saving_percentage = (
+            (
+                size_difference
+                / original_size
+            ) * 100
+            if original_size > 0
+            else 0
+        )
+
+        return {
+            "total": len(
+                results
+            ),
+            "successful": len(
+                successful
+            ),
+            "failed": len(
+                failed
+            ),
+            "original_size": original_size,
+            "new_size": new_size,
+            "size_difference": size_difference,
+            "saving_percentage": round(
+                saving_percentage,
+                2
+            ),
+        }
+
+
+# ==============================================================
+# SIMPLE TEST
+# ==============================================================
+
+if __name__ == "__main__":
+
+    converter = ImageConverter()
+
+    print(
+        "ImageConverter initialized."
+    )
+
+    print(
+        "Supported formats:",
+        ", ".join(
+            converter.get_supported_formats()
+        )
+    )
+
+    print(
+        "Can convert JPG -> WEBP:",
+        converter.can_convert(
+            "JPG",
+            "WEBP"
+        )
+    )
+
+    print(
+        "Can convert PNG -> JPG:",
+        converter.can_convert(
+            "PNG",
+            "JPG"
+        )
+    )
