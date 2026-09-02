@@ -1,790 +1,729 @@
 import json
 import os
+from copy import deepcopy
+from typing import Any, Dict, Optional
 
 
 class ConfigService:
     """
     Application configuration manager.
 
-    Responsibilities:
-        - Load application settings
-        - Save application settings
-        - Update individual settings
-        - Reset settings to defaults
-        - Validate configuration values
+    Configuration is stored as JSON and automatically created with
+    default values when it does not exist.
     """
 
-    # ==========================================================
-    # DEFAULT SETTINGS
-    # ==========================================================
+    DEFAULT_CONFIG_FILE = os.path.join("data", "config.json")
 
-    DEFAULT_CONFIG = {
-        # Compression
-        "quality": 80,
-        "output_format": "WEBP",
-
-        # Optimization
-        "smart_optimization": True,
-        "auto_resize": False,
-        "max_dimension": 1920,
-
-        # Image handling
-        "keep_exif": True,
-        "preserve_transparency": True,
-
-        # Output
-        "overwrite_files": False,
-        "auto_open_output": False,
-
-        # Interface
-        "show_preview": True,
-        "show_statistics": True,
-
-        # History
-        "save_history": True,
-
-        # Batch processing
-        "batch_quality": 80,
-        "batch_format": "WEBP",
-
-        # Performance
-        "use_fast_mode": False
+    DEFAULT_CONFIG: Dict[str, Any] = {
+        "application": {
+            "name": "Image Compressor",
+            "version": "1.0.0"
+        },
+        "compression": {
+            "quality": 85,
+            "optimize": True,
+            "progressive": True
+        },
+        "conversion": {
+            "format": "JPEG"
+        },
+        "resize": {
+            "enabled": False,
+            "width": None,
+            "height": None,
+            "percentage": 100,
+            "keep_aspect_ratio": True
+        },
+        "output": {
+            "directory": "output",
+            "overwrite": False,
+            "create_directory": True
+        },
+        "history": {
+            "enabled": True,
+            "max_items": 500
+        },
+        "interface": {
+            "theme": "system",
+            "show_preview": True,
+            "show_file_size": True,
+            "show_progress": True
+        }
     }
 
-    # ==========================================================
-    # INITIALIZATION
-    # ==========================================================
+    def __init__(self, config_path: Optional[str] = None):
+        self.config_path = config_path or self.DEFAULT_CONFIG_FILE
 
-    def __init__(
-        self,
-        config_file=None
-    ):
+        self._ensure_directory()
+        self._ensure_config()
+
+    # ------------------------------------------------------------------
+    # File Management
+    # ------------------------------------------------------------------
+
+    def _ensure_directory(self) -> None:
         """
-        Initialize configuration service.
+        Create the configuration directory if necessary.
         """
+        directory = os.path.dirname(self.config_path)
 
-        base_dir = os.path.dirname(
-            os.path.dirname(
-                os.path.dirname(
-                    os.path.abspath(__file__)
-                )
-            )
-        )
+        if directory:
+            os.makedirs(directory, exist_ok=True)
 
-        data_dir = os.path.join(
-            base_dir,
-            "data"
-        )
-
-        os.makedirs(
-            data_dir,
-            exist_ok=True
-        )
-
-        self.config_file = (
-            config_file
-            or os.path.join(
-                data_dir,
-                "config.json"
-            )
-        )
-
-        self.config = {}
-
-        self.load()
-
-    # ==========================================================
-    # LOAD
-    # ==========================================================
-
-    def load(self):
+    def _ensure_config(self) -> None:
         """
-        Load configuration from disk.
-
-        Missing settings are automatically filled with
-        default values.
+        Create the configuration file with default values if it
+        does not already exist.
         """
+        if not os.path.exists(self.config_path):
+            self._write_config(deepcopy(self.DEFAULT_CONFIG))
 
-        if not os.path.exists(
-            self.config_file
-        ):
+    # ------------------------------------------------------------------
+    # Read / Write
+    # ------------------------------------------------------------------
 
-            self.config = (
-                self.DEFAULT_CONFIG.copy()
-            )
+    def _read_config(self) -> Dict[str, Any]:
+        """
+        Read configuration from JSON file.
 
-            self.save()
-
-            return self.config.copy()
-
+        Returns:
+            Configuration dictionary.
+        """
         try:
-
             with open(
-                self.config_file,
+                self.config_path,
                 "r",
                 encoding="utf-8"
             ) as file:
+                data = json.load(file)
 
-                stored_config = json.load(
-                    file
-                )
+            if not isinstance(data, dict):
+                return deepcopy(self.DEFAULT_CONFIG)
 
-            if not isinstance(
-                stored_config,
-                dict
-            ):
-
-                stored_config = {}
-
-        except (
-            json.JSONDecodeError,
-            OSError
-        ):
-
-            stored_config = {}
-
-        # ------------------------------------------------------
-        # Start with defaults.
-        # ------------------------------------------------------
-
-        self.config = (
-            self.DEFAULT_CONFIG.copy()
-        )
-
-        # ------------------------------------------------------
-        # Apply stored settings.
-        # ------------------------------------------------------
-
-        self.config.update(
-            stored_config
-        )
-
-        # ------------------------------------------------------
-        # Validate settings.
-        # ------------------------------------------------------
-
-        self.config = (
-            self.validate_config(
-                self.config
+            return self._merge_defaults(
+                deepcopy(self.DEFAULT_CONFIG),
+                data
             )
-        )
 
-        # ------------------------------------------------------
-        # Save normalized configuration.
-        # ------------------------------------------------------
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return deepcopy(self.DEFAULT_CONFIG)
 
-        self.save()
-
-        return self.config.copy()
-
-    # ==========================================================
-    # SAVE
-    # ==========================================================
-
-    def save(self):
+    def _write_config(self, config: Dict[str, Any]) -> bool:
         """
-        Save current configuration to disk.
+        Write configuration to JSON file.
+
+        Returns:
+            True if successful, otherwise False.
         """
-
-        directory = os.path.dirname(
-            os.path.abspath(
-                self.config_file
-            )
-        )
-
-        os.makedirs(
-            directory,
-            exist_ok=True
-        )
-
-        temporary_file = (
-            self.config_file
-            + ".tmp"
-        )
-
         try:
+            self._ensure_directory()
 
             with open(
-                temporary_file,
+                self.config_path,
                 "w",
                 encoding="utf-8"
             ) as file:
-
                 json.dump(
-                    self.config,
+                    config,
                     file,
                     indent=4,
                     ensure_ascii=False
                 )
 
-            os.replace(
-                temporary_file,
-                self.config_file
-            )
+            return True
 
-        except OSError:
+        except (OSError, TypeError):
+            return False
 
-            if os.path.exists(
-                temporary_file
-            ):
+    # ------------------------------------------------------------------
+    # Default Management
+    # ------------------------------------------------------------------
 
-                os.remove(
-                    temporary_file
-                )
+    def _merge_defaults(
+        self,
+        defaults: Dict[str, Any],
+        current: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Recursively merge current configuration with defaults.
 
-            raise
+        Missing settings are automatically restored from defaults.
+        """
+        for key, default_value in defaults.items():
 
-    # ==========================================================
-    # GET
-    # ==========================================================
+            if key not in current:
+                current[key] = deepcopy(default_value)
+
+            elif isinstance(default_value, dict):
+
+                if not isinstance(current[key], dict):
+                    current[key] = deepcopy(default_value)
+
+                else:
+                    current[key] = self._merge_defaults(
+                        default_value,
+                        current[key]
+                    )
+
+        return current
+
+    def get_defaults(self) -> Dict[str, Any]:
+        """
+        Return a copy of the default configuration.
+        """
+        return deepcopy(self.DEFAULT_CONFIG)
+
+    def reset(self) -> bool:
+        """
+        Reset all settings to their default values.
+        """
+        return self._write_config(
+            deepcopy(self.DEFAULT_CONFIG)
+        )
+
+    # ------------------------------------------------------------------
+    # General Access
+    # ------------------------------------------------------------------
+
+    def get_all(self) -> Dict[str, Any]:
+        """
+        Return the complete configuration.
+        """
+        config = self._read_config()
+
+        # Save automatically if missing default values were added.
+        self._write_config(config)
+
+        return config
 
     def get(
         self,
-        key,
-        default=None
-    ):
+        key: str,
+        default: Any = None
+    ) -> Any:
         """
-        Get a configuration value.
+        Get a configuration value using dot notation.
+
+        Example:
+            config.get("compression.quality")
         """
+        if not key:
+            return default
 
-        return self.config.get(
-            key,
-            default
-        )
+        config = self.get_all()
+        parts = key.split(".")
 
-    # ==========================================================
-    # SET
-    # ==========================================================
+        current: Any = config
 
-    def set(
-        self,
-        key,
-        value,
-        save=True
-    ):
+        for part in parts:
+
+            if not isinstance(current, dict):
+                return default
+
+            if part not in current:
+                return default
+
+            current = current[part]
+
+        return current
+
+    def set(self, key: str, value: Any) -> bool:
         """
-        Update one configuration value.
+        Set a configuration value using dot notation.
 
-        Returns:
-            Validated value.
+        Example:
+            config.set("compression.quality", 90)
         """
+        if not key:
+            return False
 
-        if key not in self.DEFAULT_CONFIG:
+        parts = key.split(".")
 
-            raise KeyError(
-                f"Unknown configuration key: "
-                f"{key}"
-            )
+        if any(not part.strip() for part in parts):
+            return False
 
-        validated_value = (
-            self.validate_value(
-                key,
-                value
-            )
-        )
+        config = self.get_all()
+        current = config
 
-        self.config[key] = (
-            validated_value
-        )
+        for part in parts[:-1]:
 
-        if save:
-            self.save()
+            if part not in current:
+                current[part] = {}
 
-        return validated_value
+            if not isinstance(current[part], dict):
+                current[part] = {}
 
-    # ==========================================================
-    # UPDATE
-    # ==========================================================
+            current = current[part]
 
-    def update(
-        self,
-        settings,
-        save=True
-    ):
+        current[parts[-1]] = value
+
+        return self._write_config(config)
+
+    def update(self, values: Dict[str, Any]) -> bool:
         """
         Update multiple configuration values.
+
+        Supports nested dictionaries.
         """
+        if not isinstance(values, dict):
+            return False
 
-        if not isinstance(
-            settings,
-            dict
-        ):
+        config = self.get_all()
 
-            raise TypeError(
-                "Settings must be a dictionary."
-            )
-
-        for key, value in settings.items():
-
-            if key not in self.DEFAULT_CONFIG:
-
-                continue
-
-            self.config[key] = (
-                self.validate_value(
-                    key,
-                    value
-                )
-            )
-
-        self.config = (
-            self.validate_config(
-                self.config
-            )
+        config = self._deep_update(
+            config,
+            values
         )
 
-        if save:
-            self.save()
+        return self._write_config(config)
 
-        return self.config.copy()
-
-    # ==========================================================
-    # GET ALL
-    # ==========================================================
-
-    def get_all(self):
-        """
-        Return a copy of the complete configuration.
-        """
-
-        return self.config.copy()
-
-    # ==========================================================
-    # RESET
-    # ==========================================================
-
-    def reset(
+    def _deep_update(
         self,
-        save=True
-    ):
+        target: Dict[str, Any],
+        updates: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
-        Reset all settings to default values.
+        Recursively update a dictionary.
         """
+        for key, value in updates.items():
 
-        self.config = (
-            self.DEFAULT_CONFIG.copy()
-        )
-
-        if save:
-            self.save()
-
-        return self.config.copy()
-
-    # ==========================================================
-    # RESET SINGLE VALUE
-    # ==========================================================
-
-    def reset_key(
-        self,
-        key,
-        save=True
-    ):
-        """
-        Reset one setting to its default value.
-        """
-
-        if key not in self.DEFAULT_CONFIG:
-
-            raise KeyError(
-                f"Unknown configuration key: "
-                f"{key}"
-            )
-
-        self.config[key] = (
-            self.DEFAULT_CONFIG[key]
-        )
-
-        if save:
-            self.save()
-
-        return self.config[key]
-
-    # ==========================================================
-    # VALIDATION
-    # ==========================================================
-
-    def validate_config(
-        self,
-        config
-    ):
-        """
-        Validate the complete configuration.
-        """
-
-        validated = (
-            self.DEFAULT_CONFIG.copy()
-        )
-
-        for key, value in config.items():
-
-            if key not in self.DEFAULT_CONFIG:
-                continue
-
-            validated[key] = (
-                self.validate_value(
-                    key,
+            if (
+                isinstance(value, dict)
+                and isinstance(target.get(key), dict)
+            ):
+                target[key] = self._deep_update(
+                    target[key],
                     value
                 )
-            )
+            else:
+                target[key] = value
 
-        return validated
+        return target
 
-    # ==========================================================
-    # VALIDATE SINGLE VALUE
-    # ==========================================================
+    # ------------------------------------------------------------------
+    # Delete
+    # ------------------------------------------------------------------
 
-    @staticmethod
-    def validate_value(
-        key,
-        value
-    ):
+    def delete(self, key: str) -> bool:
         """
-        Validate and normalize a single setting.
+        Delete a configuration value.
+
+        Example:
+            config.delete("interface.show_preview")
         """
+        if not key:
+            return False
 
-        # ------------------------------------------------------
-        # Quality
-        # ------------------------------------------------------
+        parts = key.split(".")
+        config = self.get_all()
 
-        if key in (
-            "quality",
-            "batch_quality"
-        ):
+        current = config
 
-            try:
+        for part in parts[:-1]:
 
-                value = int(
-                    value
-                )
-
-            except (
-                ValueError,
-                TypeError
-            ):
-
-                value = 80
-
-            return max(
-                1,
-                min(
-                    100,
-                    value
-                )
-            )
-
-        # ------------------------------------------------------
-        # Output format
-        # ------------------------------------------------------
-
-        if key in (
-            "output_format",
-            "batch_format"
-        ):
-
-            value = str(
-                value
-            ).strip().upper()
-
-            if value == "JPEG":
-                value = "JPG"
-
-            allowed = (
-                "JPG",
-                "PNG",
-                "WEBP"
-            )
-
-            if value not in allowed:
-
-                return "WEBP"
-
-            return value
-
-        # ------------------------------------------------------
-        # Max dimension
-        # ------------------------------------------------------
-
-        if key == "max_dimension":
-
-            try:
-
-                value = int(
-                    value
-                )
-
-            except (
-                ValueError,
-                TypeError
-            ):
-
-                value = 1920
-
-            return max(
-                1,
-                value
-            )
-
-        # ------------------------------------------------------
-        # Boolean settings
-        # ------------------------------------------------------
-
-        boolean_keys = (
-            "smart_optimization",
-            "auto_resize",
-            "keep_exif",
-            "preserve_transparency",
-            "overwrite_files",
-            "auto_open_output",
-            "show_preview",
-            "show_statistics",
-            "save_history",
-            "use_fast_mode"
-        )
-
-        if key in boolean_keys:
-
-            return ConfigService._to_bool(
-                value
-            )
-
-        return value
-
-    # ==========================================================
-    # BOOLEAN CONVERSION
-    # ==========================================================
-
-    @staticmethod
-    def _to_bool(
-        value
-    ):
-        """
-        Convert common boolean representations
-        to a real bool.
-        """
-
-        if isinstance(
-            value,
-            bool
-        ):
-
-            return value
-
-        if isinstance(
-            value,
-            str
-        ):
-
-            normalized = (
-                value.strip().lower()
-            )
-
-            if normalized in (
-                "true",
-                "1",
-                "yes",
-                "on",
-                "enabled"
-            ):
-
-                return True
-
-            if normalized in (
-                "false",
-                "0",
-                "no",
-                "off",
-                "disabled"
-            ):
-
+            if not isinstance(current, dict):
                 return False
 
-        if isinstance(
-            value,
-            (int, float)
-        ):
+            if part not in current:
+                return False
 
-            return value != 0
+            current = current[part]
 
-        return False
+        last_key = parts[-1]
 
-    # ==========================================================
-    # EXPORT CONFIG
-    # ==========================================================
+        if not isinstance(current, dict):
+            return False
+
+        if last_key not in current:
+            return False
+
+        del current[last_key]
+
+        return self._write_config(config)
+
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
+
+    def validate(self, config: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Validate configuration values.
+
+        Returns:
+            True when configuration values are valid.
+        """
+        config = config or self.get_all()
+
+        # Compression quality
+        quality = config.get(
+            "compression",
+            {}
+        ).get("quality")
+
+        if not isinstance(quality, int):
+            return False
+
+        if not 1 <= quality <= 100:
+            return False
+
+        # Conversion format
+        image_format = config.get(
+            "conversion",
+            {}
+        ).get("format")
+
+        if image_format not in {
+            "JPEG",
+            "PNG",
+            "WEBP"
+        }:
+            return False
+
+        # Resize percentage
+        percentage = config.get(
+            "resize",
+            {}
+        ).get("percentage")
+
+        if not isinstance(percentage, (int, float)):
+            return False
+
+        if percentage <= 0:
+            return False
+
+        # History max items
+        max_items = config.get(
+            "history",
+            {}
+        ).get("max_items")
+
+        if not isinstance(max_items, int):
+            return False
+
+        if max_items < 1:
+            return False
+
+        # Theme
+        theme = config.get(
+            "interface",
+            {}
+        ).get("theme")
+
+        if theme not in {
+            "system",
+            "light",
+            "dark"
+        }:
+            return False
+
+        return True
+
+    # ------------------------------------------------------------------
+    # Convenience Methods
+    # ------------------------------------------------------------------
+
+    def get_compression_quality(self) -> int:
+        """
+        Return default compression quality.
+        """
+        return int(
+            self.get(
+                "compression.quality",
+                85
+            )
+        )
+
+    def set_compression_quality(
+        self,
+        quality: int
+    ) -> bool:
+        """
+        Set compression quality.
+        """
+        if not isinstance(quality, int):
+            return False
+
+        if not 1 <= quality <= 100:
+            return False
+
+        return self.set(
+            "compression.quality",
+            quality
+        )
+
+    def get_output_directory(self) -> str:
+        """
+        Return configured output directory.
+        """
+        return str(
+            self.get(
+                "output.directory",
+                "output"
+            )
+        )
+
+    def set_output_directory(
+        self,
+        directory: str
+    ) -> bool:
+        """
+        Set output directory.
+        """
+        if not isinstance(directory, str):
+            return False
+
+        directory = directory.strip()
+
+        if not directory:
+            return False
+
+        return self.set(
+            "output.directory",
+            directory
+        )
+
+    def get_conversion_format(self) -> str:
+        """
+        Return default output format.
+        """
+        return str(
+            self.get(
+                "conversion.format",
+                "JPEG"
+            )
+        )
+
+    def set_conversion_format(
+        self,
+        image_format: str
+    ) -> bool:
+        """
+        Set default conversion format.
+        """
+        if not isinstance(image_format, str):
+            return False
+
+        image_format = image_format.upper().strip()
+
+        if image_format not in {
+            "JPEG",
+            "PNG",
+            "WEBP"
+        }:
+            return False
+
+        return self.set(
+            "conversion.format",
+            image_format
+        )
+
+    def is_history_enabled(self) -> bool:
+        """
+        Return whether history recording is enabled.
+        """
+        return bool(
+            self.get(
+                "history.enabled",
+                True
+            )
+        )
+
+    def set_history_enabled(
+        self,
+        enabled: bool
+    ) -> bool:
+        """
+        Enable or disable history recording.
+        """
+        if not isinstance(enabled, bool):
+            return False
+
+        return self.set(
+            "history.enabled",
+            enabled
+        )
+
+    def get_theme(self) -> str:
+        """
+        Return interface theme.
+        """
+        return str(
+            self.get(
+                "interface.theme",
+                "system"
+            )
+        )
+
+    def set_theme(self, theme: str) -> bool:
+        """
+        Set interface theme.
+        """
+        if not isinstance(theme, str):
+            return False
+
+        theme = theme.lower().strip()
+
+        if theme not in {
+            "system",
+            "light",
+            "dark"
+        }:
+            return False
+
+        return self.set(
+            "interface.theme",
+            theme
+        )
+
+    # ------------------------------------------------------------------
+    # File Information
+    # ------------------------------------------------------------------
+
+    def get_config_path(self) -> str:
+        """
+        Return configuration file path.
+        """
+        return os.path.abspath(
+            self.config_path
+        )
+
+    def exists(self) -> bool:
+        """
+        Check whether configuration file exists.
+        """
+        return os.path.isfile(
+            self.config_path
+        )
+
+    def get_file_size(self) -> int:
+        """
+        Return configuration file size in bytes.
+        """
+        try:
+            return os.path.getsize(
+                self.config_path
+            )
+        except OSError:
+            return 0
+
+    # ------------------------------------------------------------------
+    # Export / Import
+    # ------------------------------------------------------------------
 
     def export_config(
         self,
-        output_path
-    ):
+        output_path: str
+    ) -> bool:
         """
-        Export configuration to a JSON file.
+        Export current configuration to another JSON file.
         """
-
         if not output_path:
+            return False
 
-            raise ValueError(
-                "Output path cannot be empty."
-            )
+        config = self.get_all()
 
-        directory = os.path.dirname(
-            os.path.abspath(
-                output_path
-            )
-        )
+        try:
+            directory = os.path.dirname(output_path)
 
-        os.makedirs(
-            directory,
-            exist_ok=True
-        )
+            if directory:
+                os.makedirs(
+                    directory,
+                    exist_ok=True
+                )
 
-        with open(
-            output_path,
-            "w",
-            encoding="utf-8"
-        ) as file:
+            with open(
+                output_path,
+                "w",
+                encoding="utf-8"
+            ) as file:
+                json.dump(
+                    config,
+                    file,
+                    indent=4,
+                    ensure_ascii=False
+                )
 
-            json.dump(
-                self.config,
-                file,
-                indent=4,
-                ensure_ascii=False
-            )
+            return True
 
-        return output_path
-
-    # ==========================================================
-    # IMPORT CONFIG
-    # ==========================================================
+        except (OSError, TypeError):
+            return False
 
     def import_config(
         self,
-        input_path
-    ):
+        input_path: str
+    ) -> bool:
         """
         Import configuration from a JSON file.
         """
-
-        if not os.path.isfile(
-            input_path
-        ):
-
-            raise FileNotFoundError(
-                f"Configuration file not found: "
-                f"{input_path}"
-            )
+        if not input_path:
+            return False
 
         try:
-
             with open(
                 input_path,
                 "r",
                 encoding="utf-8"
             ) as file:
+                imported_config = json.load(file)
 
-                imported = json.load(
-                    file
-                )
+            if not isinstance(imported_config, dict):
+                return False
 
-        except json.JSONDecodeError:
-
-            raise ValueError(
-                "Invalid configuration JSON file."
+            config = self._merge_defaults(
+                deepcopy(self.DEFAULT_CONFIG),
+                imported_config
             )
 
-        if not isinstance(
-            imported,
-            dict
+            if not self.validate(config):
+                return False
+
+            return self._write_config(config)
+
+        except (
+            FileNotFoundError,
+            json.JSONDecodeError,
+            OSError
         ):
+            return False
 
-            raise ValueError(
-                "Configuration must be a JSON object."
-            )
+    # ------------------------------------------------------------------
+    # Debug / Representation
+    # ------------------------------------------------------------------
 
-        self.update(
-            imported
-        )
-
-        return self.config.copy()
-
-    # ==========================================================
-    # CHECK KEY
-    # ==========================================================
-
-    def has(
-        self,
-        key
-    ):
-        """
-        Check whether a configuration key exists.
-        """
-
-        return key in self.config
-
-    # ==========================================================
-    # GET DEFAULT
-    # ==========================================================
-
-    def get_default(
-        self,
-        key
-    ):
-        """
-        Get the default value of a setting.
-        """
-
-        if key not in self.DEFAULT_CONFIG:
-
-            raise KeyError(
-                f"Unknown configuration key: "
-                f"{key}"
-            )
-
-        return self.DEFAULT_CONFIG[
-            key
-        ]
-
-    # ==========================================================
-    # COMPARE WITH DEFAULTS
-    # ==========================================================
-
-    def is_default(
-        self,
-        key
-    ):
-        """
-        Check whether a setting currently has
-        its default value.
-        """
-
-        if key not in self.DEFAULT_CONFIG:
-
-            raise KeyError(
-                f"Unknown configuration key: "
-                f"{key}"
-            )
-
+    def __repr__(self) -> str:
         return (
-            self.config.get(key)
-            == self.DEFAULT_CONFIG[key]
+            f"ConfigService("
+            f"config_path='{self.get_config_path()}')"
         )
 
-    # ==========================================================
-    # CHANGE DETECTION
-    # ==========================================================
 
-    def has_custom_settings(self):
-        """
-        Check whether the user changed any setting
-        from its default value.
-        """
+if __name__ == "__main__":
+    config = ConfigService()
 
-        for key, default_value in (
-            self.DEFAULT_CONFIG.items()
-        ):
+    print("ConfigService test")
+    print("-" * 40)
 
-            if self.config.get(
-                key
-            ) != default_value:
+    print("Config path:")
+    print(config.get_config_path())
 
-                return True
+    print("\nCompression quality:")
+    print(config.get_compression_quality())
 
-        return False
+    print("\nOutput directory:")
+    print(config.get_output_directory())
+
+    print("\nConversion format:")
+    print(config.get_conversion_format())
+
+    print("\nTheme:")
+    print(config.get_theme())
+
+    print("\nConfiguration valid:")
+    print(config.validate())
+
+    print("\nComplete configuration:")
+    print(json.dumps(
+        config.get_all(),
+        indent=4,
+        ensure_ascii=False
+    ))
