@@ -1,25 +1,13 @@
 import os
 import shutil
-from pathlib import Path
+from typing import List, Optional, Tuple
 
 
 class FileManager:
     """
-    Centralized file and directory management service.
-
-    Responsibilities:
-        - Find image files
-        - Validate files and directories
-        - Create directories
-        - Generate unique file names
-        - Get file information
-        - Copy files
-        - Delete files
+    Utility class for file and directory operations used by
+    the Image Compressor application.
     """
-
-    # ==========================================================
-    # SUPPORTED IMAGE EXTENSIONS
-    # ==========================================================
 
     SUPPORTED_IMAGE_EXTENSIONS = {
         ".jpg",
@@ -31,891 +19,292 @@ class FileManager:
         ".tif"
     }
 
-    # ==========================================================
-    # INITIALIZATION
-    # ==========================================================
-
-    def __init__(
-        self,
-        supported_extensions=None
-    ):
-        """
-        Initialize FileManager.
-
-        Args:
-            supported_extensions:
-                Optional custom set of image extensions.
-        """
-
-        if supported_extensions:
-
-            self.supported_extensions = {
-                self.normalize_extension(
-                    extension
-                )
-                for extension in (
-                    supported_extensions
-                )
-            }
-
-        else:
-
-            self.supported_extensions = (
-                self.SUPPORTED_IMAGE_EXTENSIONS.copy()
-            )
-
-    # ==========================================================
-    # FILE EXISTS
-    # ==========================================================
+    # ------------------------------------------------------------------
+    # Path Operations
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def file_exists(
-        file_path
-    ):
+    def normalize_path(path: str) -> str:
         """
-        Check whether a file exists.
+        Normalize and return an absolute path.
         """
-
-        if not file_path:
-
-            return False
-
-        return os.path.isfile(
-            file_path
-        )
-
-    # ==========================================================
-    # DIRECTORY EXISTS
-    # ==========================================================
-
-    @staticmethod
-    def directory_exists(
-        directory_path
-    ):
-        """
-        Check whether a directory exists.
-        """
-
-        if not directory_path:
-
-            return False
-
-        return os.path.isdir(
-            directory_path
-        )
-
-    # ==========================================================
-    # CREATE DIRECTORY
-    # ==========================================================
-
-    @staticmethod
-    def create_directory(
-        directory_path
-    ):
-        """
-        Create a directory if it does not exist.
-
-        Returns:
-            Absolute directory path.
-        """
-
-        if not directory_path:
-
-            raise ValueError(
-                "Directory path cannot be empty."
-            )
-
-        os.makedirs(
-            directory_path,
-            exist_ok=True
-        )
+        if not path:
+            return ""
 
         return os.path.abspath(
-            directory_path
+            os.path.normpath(path)
         )
 
-    # ==========================================================
-    # CREATE DIRECTORIES
-    # ==========================================================
-
     @staticmethod
-    def create_directories(
-        *directories
-    ):
+    def get_directory(path: str) -> str:
         """
-        Create multiple directories.
+        Return the directory portion of a path.
         """
-
-        created = []
-
-        for directory in directories:
-
-            if not directory:
-                continue
-
-            created.append(
-                FileManager.create_directory(
-                    directory
-                )
-            )
-
-        return created
-
-    # ==========================================================
-    # GET FILE EXTENSION
-    # ==========================================================
-
-    @staticmethod
-    def get_extension(
-        file_path
-    ):
-        """
-        Return the lowercase extension of a file.
-
-        Example:
-            image.JPG -> .jpg
-        """
-
-        if not file_path:
-
+        if not path:
             return ""
 
-        return (
-            os.path.splitext(
-                file_path
-            )[1]
-            .lower()
+        return os.path.dirname(
+            FileManager.normalize_path(path)
         )
 
-    # ==========================================================
-    # NORMALIZE EXTENSION
-    # ==========================================================
-
     @staticmethod
-    def normalize_extension(
-        extension
-    ):
+    def get_filename(path: str) -> str:
         """
-        Normalize an extension.
-
-        Examples:
-
-            jpg  -> .jpg
-            JPEG -> .jpeg
-            .PNG -> .png
+        Return filename including extension.
         """
-
-        if not extension:
-
+        if not path:
             return ""
 
-        extension = str(
-            extension
-        ).strip().lower()
-
-        if not extension.startswith(
-            "."
-        ):
-
-            extension = (
-                "."
-                + extension
-            )
-
-        return extension
-
-    # ==========================================================
-    # IS IMAGE
-    # ==========================================================
-
-    def is_image(
-        self,
-        file_path
-    ):
-        """
-        Check whether a file is a supported image.
-        """
-
-        if not self.file_exists(
-            file_path
-        ):
-
-            return False
-
-        extension = (
-            self.get_extension(
-                file_path
-            )
-        )
-
-        return (
-            extension
-            in self.supported_extensions
-        )
-
-    # ==========================================================
-    # FIND IMAGES
-    # ==========================================================
-
-    def find_images(
-        self,
-        directory,
-        recursive=False
-    ):
-        """
-        Find supported image files in a directory.
-
-        Args:
-            directory:
-                Directory to search.
-
-            recursive:
-                If True, search subdirectories too.
-
-        Returns:
-            Sorted list of image paths.
-        """
-
-        if not self.directory_exists(
-            directory
-        ):
-
-            raise FileNotFoundError(
-                f"Directory not found: "
-                f"{directory}"
-            )
-
-        image_files = []
-
-        if recursive:
-
-            for root, _, filenames in os.walk(
-                directory
-            ):
-
-                for filename in filenames:
-
-                    path = os.path.join(
-                        root,
-                        filename
-                    )
-
-                    if self.is_image(
-                        path
-                    ):
-
-                        image_files.append(
-                            os.path.abspath(
-                                path
-                            )
-                        )
-
-        else:
-
-            for filename in os.listdir(
-                directory
-            ):
-
-                path = os.path.join(
-                    directory,
-                    filename
-                )
-
-                if self.is_image(
-                    path
-                ):
-
-                    image_files.append(
-                        os.path.abspath(
-                            path
-                        )
-                    )
-
-        return sorted(
-            image_files,
-            key=lambda path: path.lower()
-        )
-
-    # ==========================================================
-    # FIND FILES
-    # ==========================================================
+        return os.path.basename(path)
 
     @staticmethod
-    def find_files(
-        directory,
-        recursive=False
-    ):
+    def get_filename_without_extension(path: str) -> str:
         """
-        Find all files in a directory.
+        Return filename without extension.
         """
-
-        if not os.path.isdir(
-            directory
-        ):
-
-            raise FileNotFoundError(
-                f"Directory not found: "
-                f"{directory}"
-            )
-
-        files = []
-
-        if recursive:
-
-            for root, _, filenames in os.walk(
-                directory
-            ):
-
-                for filename in filenames:
-
-                    files.append(
-                        os.path.abspath(
-                            os.path.join(
-                                root,
-                                filename
-                            )
-                        )
-                    )
-
-        else:
-
-            for filename in os.listdir(
-                directory
-            ):
-
-                path = os.path.join(
-                    directory,
-                    filename
-                )
-
-                if os.path.isfile(
-                    path
-                ):
-
-                    files.append(
-                        os.path.abspath(
-                            path
-                        )
-                    )
-
-        return sorted(
-            files,
-            key=lambda path: path.lower()
-        )
-
-    # ==========================================================
-    # GET FILE NAME
-    # ==========================================================
-
-    @staticmethod
-    def get_filename(
-        file_path,
-        with_extension=True
-    ):
-        """
-        Return file name.
-
-        Examples:
-
-            image.jpg -> image.jpg
-
-            image.jpg -> image
-        """
-
-        if not file_path:
-
+        if not path:
             return ""
 
-        filename = os.path.basename(
-            file_path
-        )
-
-        if with_extension:
-
-            return filename
+        filename = os.path.basename(path)
 
         return os.path.splitext(
             filename
         )[0]
 
-    # ==========================================================
-    # GET FILE NAME WITHOUT EXTENSION
-    # ==========================================================
-
     @staticmethod
-    def get_stem(
-        file_path
-    ):
+    def get_extension(path: str) -> str:
         """
-        Return file name without extension.
+        Return file extension including the dot.
         """
-
-        if not file_path:
-
+        if not path:
             return ""
 
-        return Path(
-            file_path
-        ).stem
+        return os.path.splitext(path)[1].lower()
 
-    # ==========================================================
-    # GET FILE SIZE
-    # ==========================================================
+    # ------------------------------------------------------------------
+    # Existence Checks
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def get_file_size(
-        file_path
-    ):
+    def exists(path: str) -> bool:
         """
-        Return file size in bytes.
+        Check whether a path exists.
         """
+        return bool(
+            path and os.path.exists(path)
+        )
 
-        if not os.path.isfile(
-            file_path
-        ):
+    @staticmethod
+    def is_file(path: str) -> bool:
+        """
+        Check whether path is a file.
+        """
+        return bool(
+            path and os.path.isfile(path)
+        )
 
-            return 0
+    @staticmethod
+    def is_directory(path: str) -> bool:
+        """
+        Check whether path is a directory.
+        """
+        return bool(
+            path and os.path.isdir(path)
+        )
+
+    # ------------------------------------------------------------------
+    # Directory Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def create_directory(
+        directory: str
+    ) -> bool:
+        """
+        Create a directory recursively.
+        """
+        if not directory:
+            return False
 
         try:
-
-            return os.path.getsize(
-                file_path
+            os.makedirs(
+                directory,
+                exist_ok=True
             )
+            return True
 
         except OSError:
-
-            return 0
-
-    # ==========================================================
-    # GET FILE SIZE MB
-    # ==========================================================
+            return False
 
     @staticmethod
-    def get_file_size_mb(
-        file_path
-    ):
+    def create_parent_directory(
+        file_path: str
+    ) -> bool:
         """
-        Return file size in megabytes.
+        Create the parent directory of a file.
         """
-
-        size = (
-            FileManager.get_file_size(
-                file_path
-            )
-        )
-
-        return round(
-            size / (
-                1024 * 1024
-            ),
-            2
-        )
-
-    # ==========================================================
-    # FORMAT FILE SIZE
-    # ==========================================================
-
-    @staticmethod
-    def format_file_size(
-        size
-    ):
-        """
-        Convert byte size to readable format.
-        """
-
-        try:
-
-            size = float(
-                size
-            )
-
-        except (
-            ValueError,
-            TypeError
-        ):
-
-            size = 0
-
-        size = max(
-            0,
-            size
-        )
-
-        units = (
-            "B",
-            "KB",
-            "MB",
-            "GB",
-            "TB"
-        )
-
-        for unit in units:
-
-            if size < 1024:
-
-                return (
-                    f"{size:.2f} "
-                    f"{unit}"
-                )
-
-            size /= 1024
-
-        return (
-            f"{size:.2f} PB"
-        )
-
-    # ==========================================================
-    # GET DIRECTORY
-    # ==========================================================
-
-    @staticmethod
-    def get_directory(
-        file_path
-    ):
-        """
-        Return the directory containing a file.
-        """
-
         if not file_path:
-
-            return ""
-
-        return os.path.dirname(
-            os.path.abspath(
-                file_path
-            )
-        )
-
-    # ==========================================================
-    # BUILD PATH
-    # ==========================================================
-
-    @staticmethod
-    def build_path(
-        directory,
-        filename
-    ):
-        """
-        Build an absolute path.
-        """
-
-        if not directory:
-
-            raise ValueError(
-                "Directory cannot be empty."
-            )
-
-        if not filename:
-
-            raise ValueError(
-                "Filename cannot be empty."
-            )
-
-        return os.path.abspath(
-            os.path.join(
-                directory,
-                filename
-            )
-        )
-
-    # ==========================================================
-    # UNIQUE FILE PATH
-    # ==========================================================
-
-    @staticmethod
-    def get_unique_path(
-        file_path
-    ):
-        """
-        Generate a unique file path.
-
-        Example:
-
-            image.jpg
-
-        becomes:
-
-            image_1.jpg
-            image_2.jpg
-            ...
-        """
-
-        file_path = os.path.abspath(
-            file_path
-        )
-
-        if not os.path.exists(
-            file_path
-        ):
-
-            return file_path
+            return False
 
         directory = os.path.dirname(
-            file_path
+            FileManager.normalize_path(file_path)
         )
 
-        filename = os.path.basename(
-            file_path
+        if not directory:
+            return True
+
+        return FileManager.create_directory(
+            directory
         )
 
-        name, extension = (
-            os.path.splitext(
-                filename
-            )
-        )
+    @staticmethod
+    def list_directory(
+        directory: str,
+        include_files: bool = True,
+        include_directories: bool = False
+    ) -> List[str]:
+        """
+        List items inside a directory.
 
-        counter = 1
+        Returns full paths.
+        """
+        if not FileManager.is_directory(directory):
+            return []
 
-        while True:
+        results = []
 
-            candidate = os.path.join(
-                directory,
-                f"{name}_{counter}"
-                f"{extension}"
-            )
+        try:
+            for item in os.listdir(directory):
 
-            if not os.path.exists(
-                candidate
-            ):
+                full_path = os.path.join(
+                    directory,
+                    item
+                )
 
-                return candidate
+                if os.path.isfile(full_path):
+                    if include_files:
+                        results.append(full_path)
 
-            counter += 1
+                elif os.path.isdir(full_path):
+                    if include_directories:
+                        results.append(full_path)
 
-    # ==========================================================
-    # COPY FILE
-    # ==========================================================
+        except OSError:
+            return []
+
+        return sorted(results)
+
+    # ------------------------------------------------------------------
+    # File Operations
+    # ------------------------------------------------------------------
 
     @staticmethod
     def copy_file(
-        source,
-        destination,
-        overwrite=False
-    ):
+        source: str,
+        destination: str,
+        overwrite: bool = False
+    ) -> bool:
         """
         Copy a file to another location.
-
-        If overwrite=False, a unique destination path
-        is automatically generated.
         """
-
-        if not os.path.isfile(
-            source
-        ):
-
-            raise FileNotFoundError(
-                f"Source file not found: "
-                f"{source}"
-            )
-
-        destination_directory = (
-            os.path.dirname(
-                os.path.abspath(
-                    destination
-                )
-            )
-        )
-
-        if destination_directory:
-
-            os.makedirs(
-                destination_directory,
-                exist_ok=True
-            )
+        if not FileManager.is_file(source):
+            return False
 
         if (
-            os.path.exists(
-                destination
-            )
+            FileManager.exists(destination)
             and not overwrite
         ):
+            return False
 
-            destination = (
-                FileManager.get_unique_path(
-                    destination
-                )
+        if not FileManager.create_parent_directory(
+            destination
+        ):
+            return False
+
+        try:
+            shutil.copy2(
+                source,
+                destination
             )
+            return True
 
-        shutil.copy2(
-            source,
-            destination
-        )
-
-        return os.path.abspath(
-            destination
-        )
-
-    # ==========================================================
-    # MOVE FILE
-    # ==========================================================
+        except OSError:
+            return False
 
     @staticmethod
     def move_file(
-        source,
-        destination,
-        overwrite=False
-    ):
+        source: str,
+        destination: str,
+        overwrite: bool = False
+    ) -> bool:
         """
         Move a file to another location.
         """
-
-        if not os.path.isfile(
-            source
-        ):
-
-            raise FileNotFoundError(
-                f"Source file not found: "
-                f"{source}"
-            )
-
-        destination_directory = (
-            os.path.dirname(
-                os.path.abspath(
-                    destination
-                )
-            )
-        )
-
-        if destination_directory:
-
-            os.makedirs(
-                destination_directory,
-                exist_ok=True
-            )
+        if not FileManager.is_file(source):
+            return False
 
         if (
-            os.path.exists(
-                destination
-            )
+            FileManager.exists(destination)
             and not overwrite
         ):
+            return False
 
-            destination = (
-                FileManager.get_unique_path(
-                    destination
-                )
+        if not FileManager.create_parent_directory(
+            destination
+        ):
+            return False
+
+        try:
+            if overwrite and os.path.exists(destination):
+                os.remove(destination)
+
+            shutil.move(
+                source,
+                destination
             )
 
-        shutil.move(
-            source,
-            destination
-        )
+            return True
 
-        return os.path.abspath(
-            destination
-        )
-
-    # ==========================================================
-    # DELETE FILE
-    # ==========================================================
+        except OSError:
+            return False
 
     @staticmethod
     def delete_file(
-        file_path
-    ):
+        file_path: str
+    ) -> bool:
         """
         Delete a file.
-
-        Returns:
-            True if deleted, otherwise False.
         """
-
-        if not os.path.isfile(
-            file_path
-        ):
-
+        if not FileManager.is_file(file_path):
             return False
 
         try:
-
-            os.remove(
-                file_path
-            )
-
+            os.remove(file_path)
             return True
 
         except OSError:
-
             return False
-
-    # ==========================================================
-    # DELETE DIRECTORY
-    # ==========================================================
-
-    @staticmethod
-    def delete_directory(
-        directory_path,
-        force=False
-    ):
-        """
-        Delete a directory.
-
-        Args:
-            force:
-                If True, delete directory recursively.
-        """
-
-        if not os.path.isdir(
-            directory_path
-        ):
-
-            return False
-
-        try:
-
-            if force:
-
-                shutil.rmtree(
-                    directory_path
-                )
-
-            else:
-
-                os.rmdir(
-                    directory_path
-                )
-
-            return True
-
-        except OSError:
-
-            return False
-
-    # ==========================================================
-    # RENAME FILE
-    # ==========================================================
 
     @staticmethod
     def rename_file(
-        file_path,
-        new_name,
-        overwrite=False
-    ):
+        file_path: str,
+        new_name: str,
+        overwrite: bool = False
+    ) -> Optional[str]:
         """
-        Rename a file while keeping it in the same directory.
+        Rename a file.
+
+        Returns:
+            New path when successful, otherwise None.
         """
-
-        if not os.path.isfile(
-            file_path
-        ):
-
-            raise FileNotFoundError(
-                f"File not found: "
-                f"{file_path}"
-            )
+        if not FileManager.is_file(file_path):
+            return None
 
         if not new_name:
+            return None
 
-            raise ValueError(
-                "New filename cannot be empty."
-            )
-
-        directory = (
-            os.path.dirname(
-                os.path.abspath(
-                    file_path
-                )
-            )
+        directory = FileManager.get_directory(
+            file_path
         )
 
         destination = os.path.join(
@@ -924,353 +313,1321 @@ class FileManager:
         )
 
         if (
-            os.path.exists(
-                destination
-            )
+            FileManager.exists(destination)
             and not overwrite
         ):
+            return None
 
-            destination = (
-                FileManager.get_unique_path(
-                    destination
-                )
-            )
+        try:
+            if overwrite and os.path.exists(destination):
+                os.remove(destination)
 
-        os.rename(
-            file_path,
-            destination
-        )
-
-        return os.path.abspath(
-            destination
-        )
-
-    # ==========================================================
-    # PREPARE OUTPUT DIRECTORY
-    # ==========================================================
-
-    @staticmethod
-    def prepare_output_directory(
-        output_directory,
-        clear=False
-    ):
-        """
-        Prepare an output directory.
-
-        If clear=True, existing files inside the directory
-        are removed.
-        """
-
-        if not output_directory:
-
-            raise ValueError(
-                "Output directory cannot be empty."
-            )
-
-        output_directory = os.path.abspath(
-            output_directory
-        )
-
-        os.makedirs(
-            output_directory,
-            exist_ok=True
-        )
-
-        if clear:
-
-            for item in os.listdir(
-                output_directory
-            ):
-
-                item_path = os.path.join(
-                    output_directory,
-                    item
-                )
-
-                try:
-
-                    if os.path.isfile(
-                        item_path
-                    ):
-
-                        os.remove(
-                            item_path
-                        )
-
-                    elif os.path.isdir(
-                        item_path
-                    ):
-
-                        shutil.rmtree(
-                            item_path
-                        )
-
-                except OSError:
-
-                    pass
-
-        return output_directory
-
-    # ==========================================================
-    # GET FILE INFORMATION
-    # ==========================================================
-
-    def get_file_info(
-        self,
-        file_path
-    ):
-        """
-        Return detailed information about a file.
-        """
-
-        if not self.file_exists(
-            file_path
-        ):
-
-            return {
-                "exists": False,
-                "path": os.path.abspath(
-                    file_path
-                )
-                if file_path
-                else "",
-                "filename": "",
-                "extension": "",
-                "size": 0,
-                "size_formatted": "0.00 B",
-                "is_image": False
-            }
-
-        size = (
-            self.get_file_size(
-                file_path
-            )
-        )
-
-        return {
-            "exists": True,
-
-            "path": os.path.abspath(
-                file_path
-            ),
-
-            "filename": self.get_filename(
-                file_path
-            ),
-
-            "name": self.get_filename(
+            os.rename(
                 file_path,
-                with_extension=False
-            ),
-
-            "extension": self.get_extension(
-                file_path
-            ),
-
-            "size": size,
-
-            "size_formatted": (
-                self.format_file_size(
-                    size
-                )
-            ),
-
-            "is_image": self.is_image(
-                file_path
+                destination
             )
-        }
 
-    # ==========================================================
-    # GET DIRECTORY SIZE
-    # ==========================================================
+            return destination
+
+        except OSError:
+            return None
+
+    # ------------------------------------------------------------------
+    # Unique File Names
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def get_directory_size(
-        directory
-    ):
+    def get_unique_path(
+        file_path: str
+    ) -> str:
         """
-        Calculate total size of all files in a directory.
+        Return a unique path without overwriting existing files.
+
+        Example:
+            image.jpg
+            image_1.jpg
+            image_2.jpg
         """
+        if not file_path:
+            return ""
 
-        if not os.path.isdir(
-            directory
-        ):
+        if not FileManager.exists(file_path):
+            return file_path
 
-            return 0
+        directory = FileManager.get_directory(
+            file_path
+        )
 
-        total_size = 0
+        filename = (
+            FileManager.get_filename_without_extension(
+                file_path
+            )
+        )
 
-        for root, _, filenames in os.walk(
-            directory
-        ):
+        extension = FileManager.get_extension(
+            file_path
+        )
 
-            for filename in filenames:
+        counter = 1
 
-                path = os.path.join(
-                    root,
+        while True:
+            candidate = os.path.join(
+                directory,
+                f"{filename}_{counter}{extension}"
+            )
+
+            if not FileManager.exists(candidate):
+                return candidate
+
+            counter += 1
+
+    # ------------------------------------------------------------------
+    # Image File Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def is_supported_image(
+        file_path: str
+    ) -> bool:
+        """
+        Check whether a file has a supported image extension.
+        """
+        extension = FileManager.get_extension(
+            file_path
+        )
+
+        return (
+            extension
+            in FileManager.SUPPORTED_IMAGE_EXTENSIONS
+        )
+
+    @staticmethod
+    def get_image_files(
+        directory: str,
+        recursive: bool = False
+    ) -> List[str]:
+        """
+        Return image files from a directory.
+        """
+        if not FileManager.is_directory(directory):
+            return []
+
+        results = []
+
+        if recursive:
+
+            for root, _, files in os.walk(directory):
+
+                for filename in files:
+
+                    full_path = os.path.join(
+                        root,
+                        filename
+                    )
+
+                    if FileManager.is_supported_image(
+                        full_path
+                    ):
+                        results.append(full_path)
+
+        else:
+
+            for filename in os.listdir(directory):
+
+                full_path = os.path.join(
+                    directory,
                     filename
                 )
 
-                try:
-
-                    total_size += os.path.getsize(
-                        path
+                if (
+                    os.path.isfile(full_path)
+                    and FileManager.is_supported_image(
+                        full_path
                     )
+                ):
+                    results.append(full_path)
 
-                except OSError:
-
-                    continue
-
-        return total_size
-
-    # ==========================================================
-    # GET IMAGE COUNT
-    # ==========================================================
-
-    def get_image_count(
-        self,
-        directory,
-        recursive=False
-    ):
-        """
-        Return number of supported images in a directory.
-        """
-
-        return len(
-            self.find_images(
-                directory,
-                recursive=recursive
-            )
-        )
-
-    # ==========================================================
-    # GET RELATIVE PATH
-    # ==========================================================
+        return sorted(results)
 
     @staticmethod
-    def get_relative_path(
-        file_path,
-        base_directory
-    ):
+    def get_image_files_from_paths(
+        paths: List[str]
+    ) -> List[str]:
         """
-        Return file path relative to a base directory.
+        Filter a list of paths and return valid image files.
         """
+        if not paths:
+            return []
 
-        return os.path.relpath(
-            os.path.abspath(
+        return [
+            path
+            for path in paths
+            if FileManager.is_file(path)
+            and FileManager.is_supported_image(path)
+        ]
+
+    # ------------------------------------------------------------------
+    # File Information
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_file_size(
+        file_path: str
+    ) -> int:
+        """
+        Return file size in bytes.
+        """
+        if not FileManager.is_file(file_path):
+            return 0
+
+        try:
+            return os.path.getsize(
                 file_path
-            ),
-            os.path.abspath(
-                base_directory
             )
-        )
 
-    # ==========================================================
-    # CHANGE EXTENSION
-    # ==========================================================
+        except OSError:
+            return 0
 
     @staticmethod
-    def change_extension(
-        file_path,
-        new_extension
-    ):
+    def get_file_info(
+        file_path: str
+    ) -> dict:
         """
-        Change the extension of a file path.
-
-        This method does not modify the actual file.
+        Return basic information about a file.
         """
+        if not FileManager.is_file(file_path):
+            return {}
 
+        try:
+            stat = os.stat(file_path)
+
+            return {
+                "path": FileManager.normalize_path(
+                    file_path
+                ),
+                "filename": FileManager.get_filename(
+                    file_path
+                ),
+                "extension": FileManager.get_extension(
+                    file_path
+                ),
+                "size": stat.st_size,
+                "created": stat.st_ctime,
+                "modified": stat.st_mtime,
+                "is_image": FileManager.is_supported_image(
+                    file_path
+                )
+            }
+
+        except OSError:
+            return {}
+
+    # ------------------------------------------------------------------
+    # File Validation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def validate_input_file(
+        file_path: str
+    ) -> Tuple[bool, str]:
+        """
+        Validate an image input file.
+
+        Returns:
+            (success, message)
+        """
         if not file_path:
+            return False, "No file path provided."
 
-            raise ValueError(
-                "File path cannot be empty."
+        if not FileManager.exists(file_path):
+            return False, "File does not exist."
+
+        if not FileManager.is_file(file_path):
+            return False, "Path is not a file."
+
+        if not FileManager.is_supported_image(file_path):
+            return False, "Unsupported image format."
+
+        if FileManager.get_file_size(file_path) <= 0:
+            return False, "File is empty."
+
+        return True, "File is valid."
+
+    # ------------------------------------------------------------------
+    # Batch Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def copy_files(
+        files: List[str],
+        output_directory: str,
+        overwrite: bool = False
+    ) -> dict:
+        """
+        Copy multiple files to a directory.
+
+        Returns operation statistics.
+        """
+        result = {
+            "total": len(files),
+            "successful": 0,
+            "failed": 0,
+            "files": []
+        }
+
+        if not FileManager.create_directory(
+            output_directory
+        ):
+            result["failed"] = len(files)
+            return result
+
+        for source in files:
+
+            if not FileManager.is_file(source):
+                result["failed"] += 1
+
+                result["files"].append({
+                    "source": source,
+                    "success": False,
+                    "destination": None
+                })
+
+                continue
+
+            destination = os.path.join(
+                output_directory,
+                FileManager.get_filename(source)
             )
 
-        new_extension = (
-            FileManager.normalize_extension(
-                new_extension
+            if not overwrite:
+                destination = FileManager.get_unique_path(
+                    destination
+                )
+
+            success = FileManager.copy_file(
+                source,
+                destination,
+                overwrite=overwrite
             )
-        )
 
-        directory = os.path.dirname(
-            file_path
-        )
+            if success:
+                result["successful"] += 1
+            else:
+                result["failed"] += 1
 
-        filename = os.path.basename(
-            file_path
-        )
+            result["files"].append({
+                "source": source,
+                "success": success,
+                "destination": destination
+            })
 
-        name = os.path.splitext(
-            filename
-        )[0]
+        return result
+
+    # ------------------------------------------------------------------
+    # Temporary / Cleanup Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def clear_directory(
+        directory: str
+    ) -> bool:
+        """
+        Remove all files and subdirectories inside a directory.
+        The directory itself is preserved.
+        """
+        if not FileManager.is_directory(directory):
+            return False
+
+        try:
+            for item in os.listdir(directory):
+
+                path = os.path.join(
+                    directory,
+                    item
+                )
+
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+
+                else:
+                    os.remove(path)
+
+            return True
+
+        except OSError:
+            return False
+
+    @staticmethod
+    def delete_directory(
+        directory: str
+    ) -> bool:
+        """
+        Delete a directory and all its contents.
+        """
+        if not FileManager.is_directory(directory):
+            return False
+
+        try:
+            shutil.rmtree(directory)
+            return True
+
+        except OSError:
+            return False
+
+    # ------------------------------------------------------------------
+    # Path Generation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def build_path(
+        directory: str,
+        filename: str
+    ) -> str:
+        """
+        Safely combine directory and filename.
+        """
+        if not directory:
+            return filename
+
+        if not filename:
+            return directory
 
         return os.path.join(
             directory,
-            f"{name}{new_extension}"
+            filename
         )
 
-    # ==========================================================
-    # VALIDATE IMAGE FILE
-    # ==========================================================
-
-    def validate_image(
-        self,
-        file_path
-    ):
+    @staticmethod
+    def change_extension(
+        file_path: str,
+        new_extension: str
+    ) -> str:
         """
-        Validate that a file exists and has a supported
-        image extension.
+        Change the extension of a file path.
+
+        Example:
+            image.jpg -> image.webp
         """
+        if not file_path or not new_extension:
+            return file_path
 
-        if not self.file_exists(
+        if not new_extension.startswith("."):
+            new_extension = "." + new_extension
+
+        base = os.path.splitext(
             file_path
-        ):
+        )[0]
 
-            return {
-                "valid": False,
-                "reason": "File does not exist."
-            }
+        return base + new_extension.lower()
 
-        if not self.is_image(
-            file_path
-        ):
+    # ------------------------------------------------------------------
+    # Utility Methods
+    # ------------------------------------------------------------------
 
-            return {
-                "valid": False,
-                "reason": "Unsupported image format."
-            }
-
-        return {
-            "valid": True,
-            "reason": None
-        }
-
-    # ==========================================================
-    # GET SUPPORTED EXTENSIONS
-    # ==========================================================
-
-    def get_supported_extensions(
-        self
-    ):
+    @staticmethod
+    def get_supported_extensions() -> List[str]:
         """
         Return supported image extensions.
         """
-
         return sorted(
-            self.supported_extensions
+            FileManager.SUPPORTED_IMAGE_EXTENSIONS
         )
 
-    # ==========================================================
-    # GET SUPPORTED EXTENSIONS STRING
-    # ==========================================================
-
-    def get_supported_extensions_string(
-        self
-    ):
+    @staticmethod
+    def count_files(
+        directory: str,
+        images_only: bool = False,
+        recursive: bool = False
+    ) -> int:
         """
-        Return extensions in a readable format.
+        Count files in a directory.
         """
+        if images_only:
+            return len(
+                FileManager.get_image_files(
+                    directory,
+                    recursive=recursive
+                )
+            )
 
-        return ", ".join(
-            self.get_supported_extensions()
+        if not FileManager.is_directory(directory):
+            return 0
+
+        if not recursive:
+            return len([
+                item
+                for item in os.listdir(directory)
+                if os.path.isfile(
+                    os.path.join(
+                        directory,
+                        item
+                    )
+                )
+            ])
+
+        count = 0
+
+        for _, _, files in os.walk(directory):
+            count += len(files)
+
+        return count
+
+
+if __name__ == "__main__":
+    print("FileManager test")
+    print("-" * 40)
+
+    test_path = "example.jpg"
+
+    print(
+        "Filename:",
+        FileManager.get_filename(test_path)
+    )
+
+    print(
+        "Filename without extension:",
+        FileManager.get_filename_without_extension(
+            test_path
         )
+    )
+
+    print(
+        "Extension:",
+        FileManager.get_extension(test_path)
+    )
+
+    print(
+        "Supported image:",
+        FileManager.is_supported_image(test_path)
+    )
+
+    print(
+        "Normalized path:",
+        FileManager.normalize_path(test_path)
+    )
+
+    print(
+        "Unique path:",
+        FileManager.get_unique_path(test_path)
+    )
+
+    print(
+        "Supported extensions:",
+        FileManager.get_supported_extensions()
+    )import os
+import shutil
+from typing import List, Optional, Tuple
+
+
+class FileManager:
+    """
+    Utility class for file and directory operations used by
+    the Image Compressor application.
+    """
+
+    SUPPORTED_IMAGE_EXTENSIONS = {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+        ".bmp",
+        ".tiff",
+        ".tif"
+    }
+
+    # ------------------------------------------------------------------
+    # Path Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def normalize_path(path: str) -> str:
+        """
+        Normalize and return an absolute path.
+        """
+        if not path:
+            return ""
+
+        return os.path.abspath(
+            os.path.normpath(path)
+        )
+
+    @staticmethod
+    def get_directory(path: str) -> str:
+        """
+        Return the directory portion of a path.
+        """
+        if not path:
+            return ""
+
+        return os.path.dirname(
+            FileManager.normalize_path(path)
+        )
+
+    @staticmethod
+    def get_filename(path: str) -> str:
+        """
+        Return filename including extension.
+        """
+        if not path:
+            return ""
+
+        return os.path.basename(path)
+
+    @staticmethod
+    def get_filename_without_extension(path: str) -> str:
+        """
+        Return filename without extension.
+        """
+        if not path:
+            return ""
+
+        filename = os.path.basename(path)
+
+        return os.path.splitext(
+            filename
+        )[0]
+
+    @staticmethod
+    def get_extension(path: str) -> str:
+        """
+        Return file extension including the dot.
+        """
+        if not path:
+            return ""
+
+        return os.path.splitext(path)[1].lower()
+
+    # ------------------------------------------------------------------
+    # Existence Checks
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def exists(path: str) -> bool:
+        """
+        Check whether a path exists.
+        """
+        return bool(
+            path and os.path.exists(path)
+        )
+
+    @staticmethod
+    def is_file(path: str) -> bool:
+        """
+        Check whether path is a file.
+        """
+        return bool(
+            path and os.path.isfile(path)
+        )
+
+    @staticmethod
+    def is_directory(path: str) -> bool:
+        """
+        Check whether path is a directory.
+        """
+        return bool(
+            path and os.path.isdir(path)
+        )
+
+    # ------------------------------------------------------------------
+    # Directory Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def create_directory(
+        directory: str
+    ) -> bool:
+        """
+        Create a directory recursively.
+        """
+        if not directory:
+            return False
+
+        try:
+            os.makedirs(
+                directory,
+                exist_ok=True
+            )
+            return True
+
+        except OSError:
+            return False
+
+    @staticmethod
+    def create_parent_directory(
+        file_path: str
+    ) -> bool:
+        """
+        Create the parent directory of a file.
+        """
+        if not file_path:
+            return False
+
+        directory = os.path.dirname(
+            FileManager.normalize_path(file_path)
+        )
+
+        if not directory:
+            return True
+
+        return FileManager.create_directory(
+            directory
+        )
+
+    @staticmethod
+    def list_directory(
+        directory: str,
+        include_files: bool = True,
+        include_directories: bool = False
+    ) -> List[str]:
+        """
+        List items inside a directory.
+
+        Returns full paths.
+        """
+        if not FileManager.is_directory(directory):
+            return []
+
+        results = []
+
+        try:
+            for item in os.listdir(directory):
+
+                full_path = os.path.join(
+                    directory,
+                    item
+                )
+
+                if os.path.isfile(full_path):
+                    if include_files:
+                        results.append(full_path)
+
+                elif os.path.isdir(full_path):
+                    if include_directories:
+                        results.append(full_path)
+
+        except OSError:
+            return []
+
+        return sorted(results)
+
+    # ------------------------------------------------------------------
+    # File Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def copy_file(
+        source: str,
+        destination: str,
+        overwrite: bool = False
+    ) -> bool:
+        """
+        Copy a file to another location.
+        """
+        if not FileManager.is_file(source):
+            return False
+
+        if (
+            FileManager.exists(destination)
+            and not overwrite
+        ):
+            return False
+
+        if not FileManager.create_parent_directory(
+            destination
+        ):
+            return False
+
+        try:
+            shutil.copy2(
+                source,
+                destination
+            )
+            return True
+
+        except OSError:
+            return False
+
+    @staticmethod
+    def move_file(
+        source: str,
+        destination: str,
+        overwrite: bool = False
+    ) -> bool:
+        """
+        Move a file to another location.
+        """
+        if not FileManager.is_file(source):
+            return False
+
+        if (
+            FileManager.exists(destination)
+            and not overwrite
+        ):
+            return False
+
+        if not FileManager.create_parent_directory(
+            destination
+        ):
+            return False
+
+        try:
+            if overwrite and os.path.exists(destination):
+                os.remove(destination)
+
+            shutil.move(
+                source,
+                destination
+            )
+
+            return True
+
+        except OSError:
+            return False
+
+    @staticmethod
+    def delete_file(
+        file_path: str
+    ) -> bool:
+        """
+        Delete a file.
+        """
+        if not FileManager.is_file(file_path):
+            return False
+
+        try:
+            os.remove(file_path)
+            return True
+
+        except OSError:
+            return False
+
+    @staticmethod
+    def rename_file(
+        file_path: str,
+        new_name: str,
+        overwrite: bool = False
+    ) -> Optional[str]:
+        """
+        Rename a file.
+
+        Returns:
+            New path when successful, otherwise None.
+        """
+        if not FileManager.is_file(file_path):
+            return None
+
+        if not new_name:
+            return None
+
+        directory = FileManager.get_directory(
+            file_path
+        )
+
+        destination = os.path.join(
+            directory,
+            new_name
+        )
+
+        if (
+            FileManager.exists(destination)
+            and not overwrite
+        ):
+            return None
+
+        try:
+            if overwrite and os.path.exists(destination):
+                os.remove(destination)
+
+            os.rename(
+                file_path,
+                destination
+            )
+
+            return destination
+
+        except OSError:
+            return None
+
+    # ------------------------------------------------------------------
+    # Unique File Names
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_unique_path(
+        file_path: str
+    ) -> str:
+        """
+        Return a unique path without overwriting existing files.
+
+        Example:
+            image.jpg
+            image_1.jpg
+            image_2.jpg
+        """
+        if not file_path:
+            return ""
+
+        if not FileManager.exists(file_path):
+            return file_path
+
+        directory = FileManager.get_directory(
+            file_path
+        )
+
+        filename = (
+            FileManager.get_filename_without_extension(
+                file_path
+            )
+        )
+
+        extension = FileManager.get_extension(
+            file_path
+        )
+
+        counter = 1
+
+        while True:
+            candidate = os.path.join(
+                directory,
+                f"{filename}_{counter}{extension}"
+            )
+
+            if not FileManager.exists(candidate):
+                return candidate
+
+            counter += 1
+
+    # ------------------------------------------------------------------
+    # Image File Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def is_supported_image(
+        file_path: str
+    ) -> bool:
+        """
+        Check whether a file has a supported image extension.
+        """
+        extension = FileManager.get_extension(
+            file_path
+        )
+
+        return (
+            extension
+            in FileManager.SUPPORTED_IMAGE_EXTENSIONS
+        )
+
+    @staticmethod
+    def get_image_files(
+        directory: str,
+        recursive: bool = False
+    ) -> List[str]:
+        """
+        Return image files from a directory.
+        """
+        if not FileManager.is_directory(directory):
+            return []
+
+        results = []
+
+        if recursive:
+
+            for root, _, files in os.walk(directory):
+
+                for filename in files:
+
+                    full_path = os.path.join(
+                        root,
+                        filename
+                    )
+
+                    if FileManager.is_supported_image(
+                        full_path
+                    ):
+                        results.append(full_path)
+
+        else:
+
+            for filename in os.listdir(directory):
+
+                full_path = os.path.join(
+                    directory,
+                    filename
+                )
+
+                if (
+                    os.path.isfile(full_path)
+                    and FileManager.is_supported_image(
+                        full_path
+                    )
+                ):
+                    results.append(full_path)
+
+        return sorted(results)
+
+    @staticmethod
+    def get_image_files_from_paths(
+        paths: List[str]
+    ) -> List[str]:
+        """
+        Filter a list of paths and return valid image files.
+        """
+        if not paths:
+            return []
+
+        return [
+            path
+            for path in paths
+            if FileManager.is_file(path)
+            and FileManager.is_supported_image(path)
+        ]
+
+    # ------------------------------------------------------------------
+    # File Information
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_file_size(
+        file_path: str
+    ) -> int:
+        """
+        Return file size in bytes.
+        """
+        if not FileManager.is_file(file_path):
+            return 0
+
+        try:
+            return os.path.getsize(
+                file_path
+            )
+
+        except OSError:
+            return 0
+
+    @staticmethod
+    def get_file_info(
+        file_path: str
+    ) -> dict:
+        """
+        Return basic information about a file.
+        """
+        if not FileManager.is_file(file_path):
+            return {}
+
+        try:
+            stat = os.stat(file_path)
+
+            return {
+                "path": FileManager.normalize_path(
+                    file_path
+                ),
+                "filename": FileManager.get_filename(
+                    file_path
+                ),
+                "extension": FileManager.get_extension(
+                    file_path
+                ),
+                "size": stat.st_size,
+                "created": stat.st_ctime,
+                "modified": stat.st_mtime,
+                "is_image": FileManager.is_supported_image(
+                    file_path
+                )
+            }
+
+        except OSError:
+            return {}
+
+    # ------------------------------------------------------------------
+    # File Validation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def validate_input_file(
+        file_path: str
+    ) -> Tuple[bool, str]:
+        """
+        Validate an image input file.
+
+        Returns:
+            (success, message)
+        """
+        if not file_path:
+            return False, "No file path provided."
+
+        if not FileManager.exists(file_path):
+            return False, "File does not exist."
+
+        if not FileManager.is_file(file_path):
+            return False, "Path is not a file."
+
+        if not FileManager.is_supported_image(file_path):
+            return False, "Unsupported image format."
+
+        if FileManager.get_file_size(file_path) <= 0:
+            return False, "File is empty."
+
+        return True, "File is valid."
+
+    # ------------------------------------------------------------------
+    # Batch Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def copy_files(
+        files: List[str],
+        output_directory: str,
+        overwrite: bool = False
+    ) -> dict:
+        """
+        Copy multiple files to a directory.
+
+        Returns operation statistics.
+        """
+        result = {
+            "total": len(files),
+            "successful": 0,
+            "failed": 0,
+            "files": []
+        }
+
+        if not FileManager.create_directory(
+            output_directory
+        ):
+            result["failed"] = len(files)
+            return result
+
+        for source in files:
+
+            if not FileManager.is_file(source):
+                result["failed"] += 1
+
+                result["files"].append({
+                    "source": source,
+                    "success": False,
+                    "destination": None
+                })
+
+                continue
+
+            destination = os.path.join(
+                output_directory,
+                FileManager.get_filename(source)
+            )
+
+            if not overwrite:
+                destination = FileManager.get_unique_path(
+                    destination
+                )
+
+            success = FileManager.copy_file(
+                source,
+                destination,
+                overwrite=overwrite
+            )
+
+            if success:
+                result["successful"] += 1
+            else:
+                result["failed"] += 1
+
+            result["files"].append({
+                "source": source,
+                "success": success,
+                "destination": destination
+            })
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Temporary / Cleanup Operations
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def clear_directory(
+        directory: str
+    ) -> bool:
+        """
+        Remove all files and subdirectories inside a directory.
+        The directory itself is preserved.
+        """
+        if not FileManager.is_directory(directory):
+            return False
+
+        try:
+            for item in os.listdir(directory):
+
+                path = os.path.join(
+                    directory,
+                    item
+                )
+
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+
+                else:
+                    os.remove(path)
+
+            return True
+
+        except OSError:
+            return False
+
+    @staticmethod
+    def delete_directory(
+        directory: str
+    ) -> bool:
+        """
+        Delete a directory and all its contents.
+        """
+        if not FileManager.is_directory(directory):
+            return False
+
+        try:
+            shutil.rmtree(directory)
+            return True
+
+        except OSError:
+            return False
+
+    # ------------------------------------------------------------------
+    # Path Generation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def build_path(
+        directory: str,
+        filename: str
+    ) -> str:
+        """
+        Safely combine directory and filename.
+        """
+        if not directory:
+            return filename
+
+        if not filename:
+            return directory
+
+        return os.path.join(
+            directory,
+            filename
+        )
+
+    @staticmethod
+    def change_extension(
+        file_path: str,
+        new_extension: str
+    ) -> str:
+        """
+        Change the extension of a file path.
+
+        Example:
+            image.jpg -> image.webp
+        """
+        if not file_path or not new_extension:
+            return file_path
+
+        if not new_extension.startswith("."):
+            new_extension = "." + new_extension
+
+        base = os.path.splitext(
+            file_path
+        )[0]
+
+        return base + new_extension.lower()
+
+    # ------------------------------------------------------------------
+    # Utility Methods
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_supported_extensions() -> List[str]:
+        """
+        Return supported image extensions.
+        """
+        return sorted(
+            FileManager.SUPPORTED_IMAGE_EXTENSIONS
+        )
+
+    @staticmethod
+    def count_files(
+        directory: str,
+        images_only: bool = False,
+        recursive: bool = False
+    ) -> int:
+        """
+        Count files in a directory.
+        """
+        if images_only:
+            return len(
+                FileManager.get_image_files(
+                    directory,
+                    recursive=recursive
+                )
+            )
+
+        if not FileManager.is_directory(directory):
+            return 0
+
+        if not recursive:
+            return len([
+                item
+                for item in os.listdir(directory)
+                if os.path.isfile(
+                    os.path.join(
+                        directory,
+                        item
+                    )
+                )
+            ])
+
+        count = 0
+
+        for _, _, files in os.walk(directory):
+            count += len(files)
+
+        return count
+
+
+if __name__ == "__main__":
+    print("FileManager test")
+    print("-" * 40)
+
+    test_path = "example.jpg"
+
+    print(
+        "Filename:",
+        FileManager.get_filename(test_path)
+    )
+
+    print(
+        "Filename without extension:",
+        FileManager.get_filename_without_extension(
+            test_path
+        )
+    )
+
+    print(
+        "Extension:",
+        FileManager.get_extension(test_path)
+    )
+
+    print(
+        "Supported image:",
+        FileManager.is_supported_image(test_path)
+    )
+
+    print(
+        "Normalized path:",
+        FileManager.normalize_path(test_path)
+    )
+
+    print(
+        "Unique path:",
+        FileManager.get_unique_path(test_path)
+    )
+
+    print(
+        "Supported extensions:",
+        FileManager.get_supported_extensions()
+    )
